@@ -95,13 +95,23 @@ const GamePage: NextPage = () => {
             />
           </div>
           <div
-            className="flex flex-col items-center justify-center gap-2"
+            className="flex flex-col items-center justify-center gap-2 mt-4"
             ref={parent}
           >
             {gameState.winner && (
               <>
                 <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
                   {gameState.winner === 'X' ? 'Green' : 'Purple'} wins!
+                </div>
+                <Button onClick={() => setGameState(initialGameState)}>
+                  Play again
+                </Button>
+              </>
+            )}
+            {gameState.board.every((tile) => tile.player !== null) && (
+              <>
+                <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
+                  It's a tie!
                 </div>
                 <Button onClick={() => setGameState(initialGameState)}>
                   Play again
