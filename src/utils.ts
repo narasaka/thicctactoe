@@ -1,4 +1,4 @@
-import { Tile } from './models';
+import type { Tile } from './models';
 
 export const checkWinner = (board: Tile[]) => {
   const winningCombinations = [

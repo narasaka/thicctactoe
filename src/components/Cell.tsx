@@ -1,4 +1,4 @@
-import { UniqueIdentifier, useDroppable } from '@dnd-kit/core';
+import { type UniqueIdentifier, useDroppable } from '@dnd-kit/core';
 
 interface CellProps {
   id: UniqueIdentifier;

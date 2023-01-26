@@ -1,5 +1,5 @@
-import { Player } from '@/models';
-import { UniqueIdentifier, useDraggable } from '@dnd-kit/core';
+import type { Player } from '@/models';
+import { type UniqueIdentifier, useDraggable } from '@dnd-kit/core';
 
 interface PieceProps {
   id: UniqueIdentifier;
@@ -26,8 +26,8 @@ const Piece: React.FC<PieceProps> = ({ id, player, disabled, inTile }) => {
       {...attributes}
       className={`m-3 h-14 w-14 rounded-full shadow-lg ${
         player === 'X' ? 'bg-emerald-400' : 'bg-indigo-400'
-      } ${disabled && 'cursor-not-allowed opacity-25'} ${
-        inTile && 'cursor-not-allowed'
+      } ${disabled ? 'cursor-not-allowed opacity-25' : ''} ${
+        inTile ? 'cursor-not-allowed' : ''
       }`}
       style={style}
     />

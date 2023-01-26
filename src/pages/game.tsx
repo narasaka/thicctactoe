@@ -1,11 +1,11 @@
 import DefaultLayout from '@/layouts/DefaultLayout';
 import type { NextPage } from 'next';
-import { DndContext, DragEndEvent } from '@dnd-kit/core';
+import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import Head from 'next/head';
 import { useEffect, useRef, useState } from 'react';
 import Piece from '@/components/Piece';
 import Cell from '@/components/Cell';
-import { GameState, Winner } from '@/models';
+import type { GameState, Winner } from '@/models';
 import Pieces from '@/components/Pieces';
 import { checkWinner } from '@/utils';
 import Button from '@/components/Button';
@@ -95,7 +95,7 @@ const GamePage: NextPage = () => {
             />
           </div>
           <div
-            className="flex flex-col items-center justify-center gap-2 mt-4"
+            className="mt-4 flex flex-col items-center justify-center gap-2"
             ref={parent}
           >
             {gameState.winner && (
@@ -111,7 +111,7 @@ const GamePage: NextPage = () => {
             {gameState.board.every((tile) => tile.player !== null) && (
               <>
                 <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
-                  It's a tie!
+                  It&apos;s a tie!
                 </div>
                 <Button onClick={() => setGameState(initialGameState)}>
                   Play again

@@ -22,7 +22,7 @@ const Home: NextPage = () => {
         </h2>
         <div className="p-2" />
         <div className="flex flex-col gap-2 px-8 md:flex-row md:justify-center">
-          <Button onClick={() => router.push('/game')}>Play local</Button>
+          <Button onClick={() => void router.push('/game')}>Play local</Button>
           <Button secondary disabled>
             Play online (coming soon!)
           </Button>

@@ -1,4 +1,4 @@
-import { GameState, Player } from '@/models';
+import type { GameState, Player } from '@/models';
 import autoAnimate from '@formkit/auto-animate';
 import { useEffect, useRef } from 'react';
 import Piece from './Piece';
