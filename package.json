@@ -9,6 +9,8 @@
     "start": "next start"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.0.7",
+    "@formkit/auto-animate": "^1.0.0-beta.6",
     "next": "13.1.2",
     "react": "18.2.0",
     "react-dom": "18.2.0",
