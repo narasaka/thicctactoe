@@ -24,7 +24,7 @@ const Piece: React.FC<PieceProps> = ({ id, player, disabled, inTile }) => {
       ref={setNodeRef}
       {...passedListeners}
       {...attributes}
-      className={`m-3 h-14 w-14 rounded-full shadow-lg transition-all duration-500 ${
+      className={`m-3 h-14 w-14 rounded-full shadow-lg transition-opacity duration-500 ${
         player === 'X' ? 'bg-emerald-400' : 'bg-indigo-400'
       } ${disabled ? 'cursor-not-allowed opacity-25' : ''} ${
         inTile ? 'cursor-not-allowed' : ''
