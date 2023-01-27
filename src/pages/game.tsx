@@ -1,11 +1,11 @@
 import DefaultLayout from '@/layouts/DefaultLayout';
 import type { NextPage } from 'next';
-import { DndContext, type DragEndEvent } from '@dnd-kit/core';
+import { DndContext, UniqueIdentifier, type DragEndEvent } from '@dnd-kit/core';
 import Head from 'next/head';
 import { useEffect, useRef, useState } from 'react';
 import Piece from '@/components/Piece';
 import Cell from '@/components/Cell';
-import type { GameState, Winner } from '@/models';
+import type { GameState, Size } from '@/models';
 import Pieces from '@/components/Pieces';
 import { checkWinner } from '@/utils';
 import Button from '@/components/Button';
@@ -15,10 +15,16 @@ const cellNames = 'ABCDEFGHI';
 const initialGameState: GameState = {
   board: cellNames
     .split('')
-    .map((name) => ({ player: null, piece: null, id: name })),
+    .map((name) => ({ player: null, piece: null, id: name, size: 0 })),
   turn: 'X',
   moves: [],
   winner: null,
+};
+const idToSize = (id: UniqueIdentifier): Size => {
+  const num = parseInt(id as string);
+  if (num % 9 < 3) return 1;
+  if (num % 9 < 6) return 2;
+  return 3;
 };
 
 const GamePage: NextPage = () => {
@@ -32,9 +38,20 @@ const GamePage: NextPage = () => {
       setGameState((prev) => {
         const board = prev.board.map((tile) => {
           if (tile.id === over.id) {
-            if (tile.piece !== null || tile.player !== null) skip = true;
+            const currPieceSize = idToSize(active.id);
+            if (
+              tile.size >= currPieceSize &&
+              tile.piece !== null &&
+              tile.player !== null
+            )
+              skip = true;
             if (skip) return tile;
-            return { ...tile, player: prev.turn, piece: active.id };
+            return {
+              ...tile,
+              player: prev.turn,
+              piece: active.id,
+              size: currPieceSize,
+            };
           }
           return tile;
         });
@@ -48,6 +65,7 @@ const GamePage: NextPage = () => {
         const winner = skip ? prev.winner : checkWinner(board);
 
         return {
+          ...prev,
           moves,
           board,
           winner,
@@ -79,12 +97,12 @@ const GamePage: NextPage = () => {
             />
             <div className="grid h-96 w-96 grid-cols-3 gap-2">
               {gameState.board.map((tile) => {
-                const { id, player, piece } = tile;
+                const { id, player, piece, size } = tile;
                 const filled = player !== null && piece;
                 return (
                   <Cell key={id} id={id}>
                     {filled ? (
-                      <Piece id={piece} player={player} inTile />
+                      <Piece id={piece} player={player} inTile size={size} />
                     ) : (
                       <div className="h-20 w-20" />
                     )}
