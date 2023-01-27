@@ -1,4 +1,4 @@
-import type { Tile } from './models';
+import type { Size, Tile } from './models';
 
 export const checkWinner = (board: Tile[]) => {
   const winningCombinations = [
@@ -14,6 +14,7 @@ export const checkWinner = (board: Tile[]) => {
   for (const combination of winningCombinations) {
     const [a, b, c] = combination;
     if (
+      board[a] &&
       board[a]?.player &&
       board[a]?.player === board[b]?.player &&
       board[a]?.player === board[c]?.player
@@ -22,4 +23,11 @@ export const checkWinner = (board: Tile[]) => {
     }
   }
   return null;
+};
+
+export const sizeToText = (size?: Size) => {
+  if (!size) return '';
+  if (size === 1) return 'S';
+  if (size === 2) return 'M';
+  if (size === 3) return 'L';
 };
