@@ -1,6 +1,7 @@
 import type { Player, Size } from '@/models';
 import { sizeToText } from '@/utils';
 import { type UniqueIdentifier, useDraggable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import cn from 'classnames';
 
 interface PieceProps {
@@ -20,28 +21,32 @@ const Piece: React.FC<PieceProps> = ({
 }) => {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id,
+    disabled: disabled || inTile,
   });
   const style = transform
     ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        transform: CSS.Translate.toString(transform),
       }
     : undefined;
-  const passedListeners = disabled || inTile ? {} : listeners;
+  const passedListeners = listeners;
 
   return (
     <button
       ref={setNodeRef}
       {...passedListeners}
       {...attributes}
-      className={cn('rounded-full shadow-lg transition-opacity duration-500', {
-        'm-5 h-10 w-10': size === 1,
-        'm-3 h-14 w-14': size === 2,
-        'h-20 w-20': size === 3,
-        'bg-emerald-400 text-emerald-600': player === 'X',
-        'bg-indigo-400 text-indigo-600': player === 'O',
-        'cursor-not-allowed opacity-25': disabled,
-        'cursor-not-allowed': inTile,
-      })}
+      className={cn(
+        'touch-none rounded-full font-semibold shadow-lg md:transition-opacity md:duration-500',
+        {
+          'h-8 w-8 md:m-5 md:h-10 md:w-10': size === 1,
+          'h-12 w-12 md:h-14 md:w-14': size === 2,
+          'h-16 w-16 md:h-20 md:w-20': size === 3,
+          'bg-emerald-400 text-emerald-600': player === 'X',
+          'bg-indigo-400 text-indigo-600': player === 'O',
+          'cursor-not-allowed opacity-25': disabled,
+          'cursor-not-allowed': inTile,
+        }
+      )}
       style={style}
     >
       {sizeToText(size)}
