@@ -1,6 +1,6 @@
-import type { Tile } from './models';
+import type { Tile, Winner } from './models';
 
-export const checkWinner = (board: Tile[]) => {
+export const checkWinner = (board: Tile[]): Winner => {
   const winningCombinations = [
     [0, 1, 2],
     [3, 4, 5],
@@ -14,11 +14,11 @@ export const checkWinner = (board: Tile[]) => {
   for (const combination of winningCombinations) {
     const [a, b, c] = combination;
     if (
-      board[a]?.player &&
-      board[a]?.player === board[b]?.player &&
-      board[a]?.player === board[c]?.player
+      board[a]!.player &&
+      board[a]!.player === board[b]?.player &&
+      board[a]!.player === board[c]?.player
     ) {
-      return board[a]?.player;
+      return board[a]!.player;
     }
   }
   return null;

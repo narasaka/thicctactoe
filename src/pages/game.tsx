@@ -17,8 +17,8 @@ const initialGameState: GameState = {
     .split('')
     .map((name) => ({ player: null, piece: null, id: name })),
   turn: 'X',
-  winner: null,
   moves: [],
+  winner: null,
 };
 
 const GamePage: NextPage = () => {
@@ -28,27 +28,30 @@ const GamePage: NextPage = () => {
   const handleDragEnd = (e: DragEndEvent) => {
     const { over, active } = e;
     if (over) {
+      let skip = false;
       setGameState((prev) => {
-        const board = prev.board.map((tile) =>
-          tile.id === over.id
-            ? {
-                ...tile,
-                player: prev.turn,
-                piece: active.id,
-              }
-            : tile
-        );
-        const winner = checkWinner(Object.values(board)) as Winner;
-        const move = {
-          piece: active.id,
-          cell: over.id,
-          player: prev.turn,
-        };
+        const board = prev.board.map((tile) => {
+          if (tile.id === over.id) {
+            if (tile.piece !== null || tile.player !== null) skip = true;
+            if (skip) return tile;
+            return { ...tile, player: prev.turn, piece: active.id };
+          }
+          return tile;
+        });
+        const moves = skip
+          ? prev.moves
+          : [
+              ...prev.moves,
+              { piece: active.id, cell: over.id, player: prev.turn },
+            ];
+        const turn = skip ? prev.turn : prev.turn === 'X' ? 'O' : 'X';
+        const winner = skip ? prev.winner : checkWinner(board);
+
         return {
-          moves: [...prev.moves, move],
+          moves,
           board,
           winner,
-          turn: prev.turn === 'X' ? 'O' : 'X',
+          turn,
         };
       });
     }
@@ -69,9 +72,10 @@ const GamePage: NextPage = () => {
         <DefaultLayout>
           <div className="flex gap-8">
             <Pieces
+              key="X"
               player="X"
               disabled={gameState.turn === 'O' || gameState.winner !== null}
-              gameState={gameState}
+              moveHistory={gameState.moves}
             />
             <div className="grid h-96 w-96 grid-cols-3 gap-2">
               {gameState.board.map((tile) => {
@@ -89,9 +93,10 @@ const GamePage: NextPage = () => {
               })}
             </div>
             <Pieces
+              key="O"
               player="O"
               disabled={gameState.turn === 'X' || gameState.winner !== null}
-              gameState={gameState}
+              moveHistory={gameState.moves}
             />
           </div>
           <div
