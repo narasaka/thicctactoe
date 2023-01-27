@@ -1,6 +1,7 @@
 import type { Player, Size } from '@/models';
-import { getStyleFromSize, sizeToText } from '@/utils';
+import { sizeToText } from '@/utils';
 import { type UniqueIdentifier, useDraggable } from '@dnd-kit/core';
+import cn from 'classnames';
 
 interface PieceProps {
   id: UniqueIdentifier;
@@ -32,15 +33,15 @@ const Piece: React.FC<PieceProps> = ({
       ref={setNodeRef}
       {...passedListeners}
       {...attributes}
-      className={`rounded-full shadow-lg transition-opacity duration-500 ${getStyleFromSize(
-        size
-      )} ${
-        player === 'X'
-          ? 'bg-emerald-400 text-emerald-600'
-          : 'bg-indigo-400 text-indigo-600'
-      } ${disabled ? 'cursor-not-allowed opacity-25' : ''} ${
-        inTile ? 'cursor-not-allowed' : ''
-      }`}
+      className={cn('rounded-full shadow-lg transition-opacity duration-500', {
+        'm-5 h-10 w-10': size === 1,
+        'm-3 h-14 w-14': size === 2,
+        'h-20 w-20': size === 3,
+        'bg-emerald-400 text-emerald-600': player === 'X',
+        'bg-indigo-400 text-indigo-600': player === 'O',
+        'cursor-not-allowed opacity-25': disabled,
+        'cursor-not-allowed': inTile,
+      })}
       style={style}
     >
       {sizeToText(size)}

@@ -1,11 +1,11 @@
 import DefaultLayout from '@/layouts/DefaultLayout';
 import type { NextPage } from 'next';
-import { DndContext, UniqueIdentifier, type DragEndEvent } from '@dnd-kit/core';
+import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import Head from 'next/head';
 import { useEffect, useRef, useState } from 'react';
 import Piece from '@/components/Piece';
 import Cell from '@/components/Cell';
-import type { GameState, Size } from '@/models';
+import type { GameState } from '@/models';
 import Pieces from '@/components/Pieces';
 import { checkWinner } from '@/utils';
 import Button from '@/components/Button';
@@ -20,8 +20,8 @@ const initialGameState: GameState = {
   moves: [],
   winner: null,
 };
-const idToSize = (id: UniqueIdentifier): Size => {
-  const num = parseInt(id as string);
+const idToSize = (id: string) => {
+  const num = parseInt(id);
   if (num % 9 < 3) return 1;
   if (num % 9 < 6) return 2;
   return 3;
@@ -32,7 +32,8 @@ const GamePage: NextPage = () => {
   const parent = useRef<HTMLDivElement>(null);
 
   const handleDragEnd = (e: DragEndEvent) => {
-    const { over, active } = e;
+    const over = e.over as { id: string };
+    const active = e.active as { id: string };
     if (over) {
       let skip = false;
       setGameState((prev) => {
