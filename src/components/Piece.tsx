@@ -36,7 +36,7 @@ const Piece: React.FC<PieceProps> = ({
       {...passedListeners}
       {...attributes}
       className={cn(
-        'touch-none rounded-full font-semibold shadow-lg md:transition-opacity md:duration-500',
+        'touch-none select-none rounded-full font-semibold shadow-lg md:transition-opacity md:duration-500',
         {
           'h-8 w-8 md:m-5 md:h-10 md:w-10': size === 1,
           'h-12 w-12 md:h-14 md:w-14': size === 2,
