@@ -10,6 +10,7 @@ import Pieces from '@/components/Pieces';
 import { checkWinner } from '@/utils';
 import Button from '@/components/Button';
 import autoAnimate from '@formkit/auto-animate';
+import cn from 'classnames';
 
 const cellNames = 'ABCDEFGHI';
 const initialGameState: GameState = {
@@ -31,6 +32,7 @@ const GamePage: NextPage = () => {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const winnerContainer = useRef<HTMLDivElement>(null);
   const mobilePieceContainer = useRef<HTMLDivElement>(null);
+  const isTie = gameState.board.every((tile) => tile.player !== null);
 
   const handleDragEnd = (e: DragEndEvent) => {
     const over = e.over as { id: string };
@@ -121,12 +123,11 @@ const GamePage: NextPage = () => {
               disabled={gameState.turn === 'X' || gameState.winner !== null}
               moveHistory={gameState.moves}
             />
-            {!gameState.winner && (
-              <div className="block md:hidden" ref={mobilePieceContainer}></div>
-            )}
           </div>
           <div
-            className="mt-4 flex flex-col items-center justify-center gap-2"
+            className={cn(
+              'mt-4 flex flex-col items-center justify-center gap-2'
+            )}
             ref={winnerContainer}
           >
             {gameState.winner && (
@@ -139,20 +140,23 @@ const GamePage: NextPage = () => {
                 </Button>
               </>
             )}
-            {!gameState.winner &&
-              gameState.board.every((tile) => tile.player !== null) && (
-                <>
-                  <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
-                    It&apos;s a tie!
-                  </div>
-                  <Button onClick={() => setGameState(initialGameState)}>
-                    Play again
-                  </Button>
-                </>
-              )}
-            {!gameState.winner && (
+            {!gameState.winner && isTie && (
               <>
-                {gameState.turn === 'X' ? (
+                <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
+                  It&apos;s a tie!
+                </div>
+                <Button onClick={() => setGameState(initialGameState)}>
+                  Play again
+                </Button>
+              </>
+            )}
+            {!gameState.winner && !isTie && (
+              <>
+                <div
+                  className={cn('transition-all duration-300', {
+                    'fixed translate-y-full opacity-0': gameState.turn === 'O',
+                  })}
+                >
                   <Pieces
                     key="X"
                     player="X"
@@ -160,7 +164,12 @@ const GamePage: NextPage = () => {
                     moveHistory={gameState.moves}
                     isMobile
                   />
-                ) : (
+                </div>
+                <div
+                  className={cn('transition-all duration-300', {
+                    'fixed translate-y-full opacity-0': gameState.turn === 'X',
+                  })}
+                >
                   <Pieces
                     key="O"
                     player="O"
@@ -168,7 +177,7 @@ const GamePage: NextPage = () => {
                     moveHistory={gameState.moves}
                     isMobile
                   />
-                )}
+                </div>
               </>
             )}
           </div>
