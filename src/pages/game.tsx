@@ -95,23 +95,21 @@ const GamePage: NextPage = () => {
       </Head>
       <DndContext onDragEnd={handleDragEnd}>
         <DefaultLayout>
-          <div className="grid gap-8 md:grid-cols-3">
+          <div className="grid place-items-center gap-8 lg:grid-cols-3">
             <Pieces
               key="X"
               player="X"
               disabled={gameState.turn === 'O' || gameState.winner !== null}
               moveHistory={gameState.moves}
             />
-            <div className="grid h-80 w-80 grid-cols-3 gap-2 md:h-96 md:w-96">
+            <div className="grid grid-cols-3 gap-2">
               {gameState.board.map((tile) => {
                 const { id, player, piece, size } = tile;
                 const filled = player !== null && piece;
                 return (
                   <Cell key={id} id={id}>
-                    {filled ? (
+                    {filled && (
                       <Piece id={piece} player={player} inTile size={size} />
-                    ) : (
-                      <div className="h-20 w-20" />
                     )}
                   </Cell>
                 );
