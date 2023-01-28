@@ -41,6 +41,7 @@ const GamePage: NextPage = () => {
         const board = prev.board.map((tile) => {
           if (tile.id === over.id) {
             const currPieceSize = idToSize(active.id);
+            console.log(currPieceSize);
             if (
               tile.size >= currPieceSize &&
               tile.piece !== null &&
@@ -67,7 +68,6 @@ const GamePage: NextPage = () => {
         const winner = skip ? prev.winner : checkWinner(board);
 
         return {
-          ...prev,
           moves,
           board,
           winner,
@@ -85,6 +85,7 @@ const GamePage: NextPage = () => {
     mobilePieceContainer.current && autoAnimate(mobilePieceContainer.current);
   }, [mobilePieceContainer]);
 
+  console.log(gameState.board);
   return (
     <>
       <Head>
@@ -130,18 +131,28 @@ const GamePage: NextPage = () => {
             className="mt-4 flex flex-col items-center justify-center gap-2"
             ref={winnerContainer}
           >
-            {gameState.winner ? (
+            {gameState.winner && (
               <>
                 <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
                   {gameState.winner === 'X' ? 'Green wins' : 'Purple wins'}
-                  {gameState.board.every((tile) => tile.player !== null) &&
-                    'It&apos;s a tie!'}
                 </div>
                 <Button onClick={() => setGameState(initialGameState)}>
                   Play again
                 </Button>
               </>
-            ) : (
+            )}
+            {!gameState.winner &&
+              gameState.board.every((tile) => tile.player !== null) && (
+                <>
+                  <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
+                    It&apos;s a tie!
+                  </div>
+                  <Button onClick={() => setGameState(initialGameState)}>
+                    Play again
+                  </Button>
+                </>
+              )}
+            {!gameState.winner && (
               <>
                 {gameState.turn === 'X' ? (
                   <Pieces
