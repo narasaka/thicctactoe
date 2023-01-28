@@ -26,7 +26,7 @@ const Pieces: React.FC<PieceProps> = ({
   useEffect(() => {
     if (isMobile) return;
     parent.current && autoAnimate(parent.current);
-  }, [parent]);
+  }, [parent, isMobile]);
   return (
     <div
       className={cn('grid-cols-3 place-items-center gap-4', {

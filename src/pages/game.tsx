@@ -133,10 +133,9 @@ const GamePage: NextPage = () => {
             {gameState.winner ? (
               <>
                 <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
-                  {gameState.winner === 'X' ? 'Green' : 'Purple'} wins!
-                  {gameState.board.every((tile) => tile.player !== null) && (
-                    <>"It&apos;s a tie!"</>
-                  )}
+                  {gameState.winner === 'X' ? 'Green wins' : 'Purple wins'}
+                  {gameState.board.every((tile) => tile.player !== null) &&
+                    'It&apos;s a tie!'}
                 </div>
                 <Button onClick={() => setGameState(initialGameState)}>
                   Play again
