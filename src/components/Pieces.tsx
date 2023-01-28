@@ -2,14 +2,21 @@ import type { Move, Player } from '@/models';
 import autoAnimate from '@formkit/auto-animate';
 import { useEffect, useRef } from 'react';
 import Piece from './Piece';
+import cn from 'classnames';
 
 interface PieceProps {
   player: Player;
   disabled: boolean;
   moveHistory: Move[];
+  isMobile?: boolean;
 }
 
-const Pieces: React.FC<PieceProps> = ({ player, disabled, moveHistory }) => {
+const Pieces: React.FC<PieceProps> = ({
+  player,
+  disabled,
+  moveHistory,
+  isMobile,
+}) => {
   const pieces =
     player === 'X'
       ? [0, 1, 2, 3, 4, 5, 6, 7, 8].map(String)
@@ -17,17 +24,24 @@ const Pieces: React.FC<PieceProps> = ({ player, disabled, moveHistory }) => {
   const playedPieces = moveHistory.map((move) => move.piece);
   const parent = useRef(null);
   useEffect(() => {
+    if (isMobile) return;
     parent.current && autoAnimate(parent.current);
-  }, [parent]);
+  }, [parent, isMobile]);
   return (
-    <div className="grid grid-cols-3 gap-4" ref={parent}>
+    <div
+      className={cn('grid-cols-3 place-items-center gap-4', {
+        'hidden md:grid': !isMobile,
+        'grid w-full md:hidden': isMobile,
+      })}
+      ref={parent}
+    >
       {pieces
         .slice(0, 3)
         .map((piece) =>
           playedPieces.includes(piece) ? null : (
             <Piece
               key={piece}
-              id={piece}
+              id={isMobile ? piece : parseInt(piece) * 3}
               player={player}
               disabled={disabled}
               size={1}
@@ -40,7 +54,7 @@ const Pieces: React.FC<PieceProps> = ({ player, disabled, moveHistory }) => {
           playedPieces.includes(piece) ? null : (
             <Piece
               key={piece}
-              id={piece}
+              id={isMobile ? piece : parseInt(piece) * 3}
               player={player}
               disabled={disabled}
               size={2}
@@ -53,7 +67,7 @@ const Pieces: React.FC<PieceProps> = ({ player, disabled, moveHistory }) => {
           playedPieces.includes(piece) ? null : (
             <Piece
               key={piece}
-              id={piece}
+              id={isMobile ? piece : parseInt(piece) * 3}
               player={player}
               disabled={disabled}
               size={3}

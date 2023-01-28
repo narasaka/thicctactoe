@@ -10,7 +10,8 @@ saw [gobblet gobblers](https://duckduckgo.com/?q=gobblet+gobblers) and wanted an
 
 - [x] actually implement the game
 - [ ] online multiplayer
-- [ ] improve the pieces' style
+- [ ] better navigation
+- [ ] better piece styles
 - [ ] leaderboard??
 
 ## running

@@ -29,7 +29,8 @@ const idToSize = (id: string) => {
 
 const GamePage: NextPage = () => {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
-  const parent = useRef<HTMLDivElement>(null);
+  const winnerContainer = useRef<HTMLDivElement>(null);
+  const mobilePieceContainer = useRef<HTMLDivElement>(null);
 
   const handleDragEnd = (e: DragEndEvent) => {
     const over = e.over as { id: string };
@@ -77,26 +78,30 @@ const GamePage: NextPage = () => {
   };
 
   useEffect(() => {
-    parent.current && autoAnimate(parent.current);
-  }, [parent]);
+    winnerContainer.current && autoAnimate(winnerContainer.current);
+  }, [winnerContainer]);
+
+  useEffect(() => {
+    mobilePieceContainer.current && autoAnimate(mobilePieceContainer.current);
+  }, [mobilePieceContainer]);
 
   return (
     <>
       <Head>
         <title>ThiccTacToe</title>
-        <meta name="description" content="A twist on the classic Tic-Tac-Toe" />
+        <meta name="description" content="A twist on the classic tictactoe" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <DndContext onDragEnd={handleDragEnd}>
         <DefaultLayout>
-          <div className="flex gap-8">
+          <div className="grid gap-8 md:grid-cols-3">
             <Pieces
               key="X"
               player="X"
               disabled={gameState.turn === 'O' || gameState.winner !== null}
               moveHistory={gameState.moves}
             />
-            <div className="grid h-96 w-96 grid-cols-3 gap-2">
+            <div className="grid h-80 w-80 grid-cols-3 gap-2 md:h-96 md:w-96">
               {gameState.board.map((tile) => {
                 const { id, player, piece, size } = tile;
                 const filled = player !== null && piece;
@@ -117,29 +122,44 @@ const GamePage: NextPage = () => {
               disabled={gameState.turn === 'X' || gameState.winner !== null}
               moveHistory={gameState.moves}
             />
+            {!gameState.winner && (
+              <div className="block md:hidden" ref={mobilePieceContainer}></div>
+            )}
           </div>
           <div
             className="mt-4 flex flex-col items-center justify-center gap-2"
-            ref={parent}
+            ref={winnerContainer}
           >
-            {gameState.winner && (
+            {gameState.winner ? (
               <>
                 <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
-                  {gameState.winner === 'X' ? 'Green' : 'Purple'} wins!
+                  {gameState.winner === 'X' ? 'Green wins' : 'Purple wins'}
+                  {gameState.board.every((tile) => tile.player !== null) &&
+                    'It&apos;s a tie!'}
                 </div>
                 <Button onClick={() => setGameState(initialGameState)}>
                   Play again
                 </Button>
               </>
-            )}
-            {gameState.board.every((tile) => tile.player !== null) && (
+            ) : (
               <>
-                <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
-                  It&apos;s a tie!
-                </div>
-                <Button onClick={() => setGameState(initialGameState)}>
-                  Play again
-                </Button>
+                {gameState.turn === 'X' ? (
+                  <Pieces
+                    key="X"
+                    player="X"
+                    disabled={gameState.winner !== null}
+                    moveHistory={gameState.moves}
+                    isMobile
+                  />
+                ) : (
+                  <Pieces
+                    key="O"
+                    player="O"
+                    disabled={gameState.winner !== null}
+                    moveHistory={gameState.moves}
+                    isMobile
+                  />
+                )}
               </>
             )}
           </div>
