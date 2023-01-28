@@ -14,7 +14,7 @@ const Cell: React.FC<CellProps> = ({ id, children }) => {
     <div
       ref={setNodeRef}
       className={cn(
-        'grid place-items-center rounded shadow-lg transition-all duration-500',
+        'grid max-h-[6rem] min-h-[6rem] min-w-[6rem] max-w-[6rem] place-items-center rounded shadow-lg transition-all duration-500',
         {
           'bg-emerald-100': isOver,
           'bg-white': !isOver,
