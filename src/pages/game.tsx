@@ -41,7 +41,6 @@ const GamePage: NextPage = () => {
         const board = prev.board.map((tile) => {
           if (tile.id === over.id) {
             const currPieceSize = idToSize(active.id);
-            console.log(currPieceSize);
             if (
               tile.size >= currPieceSize &&
               tile.piece !== null &&
@@ -85,7 +84,6 @@ const GamePage: NextPage = () => {
     mobilePieceContainer.current && autoAnimate(mobilePieceContainer.current);
   }, [mobilePieceContainer]);
 
-  console.log(gameState.board);
   return (
     <>
       <Head>
