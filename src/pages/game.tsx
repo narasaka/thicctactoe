@@ -23,8 +23,8 @@ const initialGameState: GameState = {
 };
 const idToSize = (id: string) => {
   const num = parseInt(id);
-  if (num % 9 < 3) return 1;
-  if (num % 9 < 6) return 2;
+  if (num % 9 < 5) return 1;
+  if (num % 9 < 8) return 2;
   return 3;
 };
 
