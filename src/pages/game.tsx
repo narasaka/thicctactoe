@@ -5,9 +5,9 @@ import Head from 'next/head';
 import { useEffect, useRef, useState } from 'react';
 import Piece from '@/components/Piece';
 import Cell from '@/components/Cell';
-import type { GameState } from '@/models';
+import { GameState, Size, tileSchema } from '@/models';
 import Pieces from '@/components/Pieces';
-import { checkWinner } from '@/utils';
+import { checkWinner, idToSize, numerizedSize } from '@/utils';
 import Button from '@/components/Button';
 import autoAnimate from '@formkit/auto-animate';
 import cn from 'classnames';
@@ -16,16 +16,10 @@ const cellNames = 'ABCDEFGHI';
 const initialGameState: GameState = {
   board: cellNames
     .split('')
-    .map((name) => ({ player: null, piece: null, id: name, size: 0 })),
+    .map((name) => ({ player: null, piece: null, id: name, size: null })),
   turn: 'X',
   moves: [],
   winner: null,
-};
-const idToSize = (id: string) => {
-  const num = parseInt(id);
-  if (num % 9 < 5) return 1;
-  if (num % 9 < 8) return 2;
-  return 3;
 };
 
 const GamePage: NextPage = () => {
@@ -44,7 +38,7 @@ const GamePage: NextPage = () => {
           if (tile.id === over.id) {
             const currPieceSize = idToSize(active.id);
             if (
-              tile.size >= currPieceSize &&
+              numerizedSize(tile.size!) >= numerizedSize(currPieceSize!) &&
               tile.piece !== null &&
               tile.player !== null
             )
@@ -54,7 +48,7 @@ const GamePage: NextPage = () => {
               ...tile,
               player: prev.turn,
               piece: active.id,
-              size: currPieceSize,
+              size: currPieceSize as Size,
             };
           }
           return tile;
@@ -69,6 +63,7 @@ const GamePage: NextPage = () => {
         const winner = skip ? prev.winner : checkWinner(board);
 
         return {
+          ...prev,
           moves,
           board,
           winner,
@@ -104,7 +99,7 @@ const GamePage: NextPage = () => {
             />
             <div className="grid grid-cols-3 gap-2">
               {gameState.board.map((tile) => {
-                const { id, player, piece, size } = tile;
+                const { id, player, piece, size } = tileSchema.parse(tile);
                 const filled = player !== null && piece;
                 return (
                   <Cell key={id} id={id}>

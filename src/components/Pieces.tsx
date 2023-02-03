@@ -58,7 +58,7 @@ const Pieces: React.FC<Props> = ({
               id={piece}
               player={player}
               disabled={disabled}
-              size={1}
+              size={'small'}
             />
           )
         )}
@@ -71,7 +71,7 @@ const Pieces: React.FC<Props> = ({
               id={piece}
               player={player}
               disabled={disabled}
-              size={2}
+              size={'medium'}
             />
           )
         )}
@@ -84,7 +84,7 @@ const Pieces: React.FC<Props> = ({
               id={piece}
               player={player}
               disabled={disabled}
-              size={3}
+              size={'large'}
             />
           )
         )}
