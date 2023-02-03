@@ -44,7 +44,7 @@ const Pieces: React.FC<PieceProps> = ({
       ref={parent}
     >
       {pieces
-        .slice(0, 3)
+        .slice(0, 5)
         .map((piece) =>
           playedPieces.includes(piece) ? null : (
             <Piece
@@ -57,7 +57,7 @@ const Pieces: React.FC<PieceProps> = ({
           )
         )}
       {pieces
-        .slice(3, 6)
+        .slice(5, 8)
         .map((piece) =>
           playedPieces.includes(piece) ? null : (
             <Piece
@@ -70,7 +70,7 @@ const Pieces: React.FC<PieceProps> = ({
           )
         )}
       {pieces
-        .slice(6, 9)
+        .slice(8, 9)
         .map((piece) =>
           playedPieces.includes(piece) ? null : (
             <Piece
