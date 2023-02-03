@@ -15,16 +15,14 @@ const Home: NextPage = () => {
       </Head>
       <DefaultLayout className="container">
         <h1 className="text-center text-6xl font-extrabold tracking-tight sm:text-7xl">
-          ThiccTacToe
+          404
         </h1>
-        <h2 className="text-center text-gray-500 sm:text-lg">
-          a twist on the classic TicTacToe
-        </h2>
+        <h2 className="text-center text-gray-500 sm:text-lg">where u goin?</h2>
         <div className="p-2" />
         <div className="flex flex-col gap-2 px-8 md:flex-row md:justify-center">
-          <Button onClick={() => void router.push('/game')}>Play local</Button>
-          <Button intent={'secondary'} disabled>
-            Play online (coming soon!)
+          <Button onClick={() => void router.push('/')}>&larr; Home</Button>
+          <Button intent={'secondary'} onClick={() => void router.back()}>
+            &larr; Back
           </Button>
         </div>
       </DefaultLayout>

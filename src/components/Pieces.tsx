@@ -2,16 +2,28 @@ import type { Move, Player } from '@/models';
 import autoAnimate from '@formkit/auto-animate';
 import { useEffect, useRef } from 'react';
 import Piece from './Piece';
-import cn from 'classnames';
+import { cva, VariantProps } from 'class-variance-authority';
 
-interface PieceProps {
+const piecesClass = cva('grid-cols-3 place-items-center gap-4', {
+  variants: {
+    isMobile: {
+      true: 'grid w-full md:hidden',
+      false: 'hidden md:grid',
+    },
+  },
+  defaultVariants: {
+    isMobile: false,
+  },
+});
+type PiecesProps = VariantProps<typeof piecesClass>;
+
+interface Props extends PiecesProps {
   player: Player;
   disabled: boolean;
   moveHistory: Move[];
-  isMobile?: boolean;
 }
 
-const Pieces: React.FC<PieceProps> = ({
+const Pieces: React.FC<Props> = ({
   player,
   disabled,
   moveHistory,
@@ -36,13 +48,7 @@ const Pieces: React.FC<PieceProps> = ({
     parent.current && autoAnimate(parent.current);
   }, [parent, isMobile]);
   return (
-    <div
-      className={cn('grid-cols-3 place-items-center gap-4', {
-        'hidden md:grid': !isMobile,
-        'grid w-full md:hidden': isMobile,
-      })}
-      ref={parent}
-    >
+    <div className={piecesClass({ isMobile })} ref={parent}>
       {pieces
         .slice(0, 5)
         .map((piece) =>
