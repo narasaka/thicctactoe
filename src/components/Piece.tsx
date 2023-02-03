@@ -1,6 +1,6 @@
 import { type UniqueIdentifier, useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { cva, VariantProps } from 'class-variance-authority';
+import { cva, type VariantProps } from 'class-variance-authority';
 
 const piece = cva(
   'touch-none select-none rounded-full font-semibold shadow-lg md:transition-opacity md:duration-500',
@@ -52,7 +52,7 @@ const Piece: React.FC<Props> = ({ id, player, disabled, inTile, size }) => {
       className={piece({ player, size, disabled, inTile })}
       style={style}
     >
-      {size && size[0]!.toUpperCase()}
+      {size && size[0] && size[0].toUpperCase()}
     </button>
   );
 };

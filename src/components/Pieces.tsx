@@ -2,7 +2,7 @@ import type { Move, Player } from '@/models';
 import autoAnimate from '@formkit/auto-animate';
 import { useEffect, useRef } from 'react';
 import Piece from './Piece';
-import { cva, VariantProps } from 'class-variance-authority';
+import { cva, type VariantProps } from 'class-variance-authority';
 
 const piecesClass = cva('grid-cols-3 place-items-center gap-4', {
   variants: {

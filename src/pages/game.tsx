@@ -5,7 +5,7 @@ import Head from 'next/head';
 import { useEffect, useRef, useState } from 'react';
 import Piece from '@/components/Piece';
 import Cell from '@/components/Cell';
-import { GameState, Size, tileSchema } from '@/models';
+import { type GameState, type Size, tileSchema } from '@/models';
 import Pieces from '@/components/Pieces';
 import { checkWinner, idToSize, numerizedSize } from '@/utils';
 import Button from '@/components/Button';
@@ -38,7 +38,8 @@ const GamePage: NextPage = () => {
           if (tile.id === over.id) {
             const currPieceSize = idToSize(active.id);
             if (
-              numerizedSize(tile.size!) >= numerizedSize(currPieceSize!) &&
+              tile.size &&
+              numerizedSize(tile.size) >= numerizedSize(currPieceSize) &&
               tile.piece !== null &&
               tile.player !== null
             )
