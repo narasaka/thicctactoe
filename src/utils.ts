@@ -1,4 +1,4 @@
-import type { Size, Tile } from './models';
+import type { Tile } from './models';
 
 export const checkWinner = (board: Tile[]) => {
   const winningCombinations = [
@@ -25,9 +25,31 @@ export const checkWinner = (board: Tile[]) => {
   return null;
 };
 
-export const sizeToText = (size?: Size) => {
-  if (!size) return '';
-  if (size === 1) return 'S';
-  if (size === 2) return 'M';
-  if (size === 3) return 'L';
+export const numerizedSize = (size: string) => {
+  switch (size) {
+    case 'small':
+      return 1;
+    case 'medium':
+      return 2;
+    case 'large':
+      return 3;
+    default:
+      return 0;
+  }
+};
+
+export const idToNumerizedSize = (id: string) => {
+  const num = parseInt(id);
+  if (isNaN(num)) return 0;
+  if (num % 9 < 5) return 1;
+  if (num % 9 < 8) return 2;
+  return 3;
+};
+
+export const idToSize = (id: string) => {
+  const num = parseInt(id);
+  if (isNaN(num)) return 'small';
+  if (num % 9 < 5) return 'small';
+  if (num % 9 < 8) return 'medium';
+  return 'large';
 };
