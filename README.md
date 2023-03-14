@@ -1,8 +1,8 @@
 <h1 align="center">thicctactoe</h1>
 
-![thumbnail](./thumbnail.png?raw=true)
+<p align="center">tictactoe that requires more brain (i think)</p>
 
-tictactoe that requires a bit more brain
+![thumbnail](https://user-images.githubusercontent.com/61931072/225155039-2f6da681-f7ca-4d5c-8074-7738c5b102e2.png)
 
 ## motivation
 
