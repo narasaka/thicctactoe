@@ -1,6 +1,8 @@
-# thicctactoe
+<h1 align="center">thicctactoe</h1>
 
-tictactoe that requires a bit more brain
+<p align="center">tictactoe that requires more brain (i think)</p>
+
+![thumbnail](https://user-images.githubusercontent.com/61931072/225155039-2f6da681-f7ca-4d5c-8074-7738c5b102e2.png)
 
 ## motivation
 
