@@ -1,4 +1,5 @@
-# thicctactoe
+<h1 align="center">thicctactoe</h1>
+![thumbnail](./thumbnail.png?raw=true)
 
 tictactoe that requires a bit more brain
 
