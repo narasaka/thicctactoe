@@ -7,7 +7,7 @@ import Piece from '@/components/Piece';
 import Cell from '@/components/Cell';
 import { type GameState, type Size, tileSchema } from '@/models';
 import Pieces from '@/components/Pieces';
-import { checkWinner, idToSize, numerizedSize } from '@/utils';
+import { checkWinner, hasLegalMove, idToSize, numerizedSize } from '@/utils';
 import Button from '@/components/Button';
 import autoAnimate from '@formkit/auto-animate';
 import cn from 'classnames';
@@ -26,7 +26,9 @@ const GamePage: NextPage = () => {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const winnerContainer = useRef<HTMLDivElement>(null);
   const mobilePieceContainer = useRef<HTMLDivElement>(null);
-  const isTie = gameState.board.every((tile) => tile.player !== null);
+  const isDraw =
+    gameState.winner === null &&
+    !hasLegalMove(gameState.board, gameState.moves, gameState.turn);
 
   const handleDragEnd = (e: DragEndEvent) => {
     const over = e.over as { id: string };
@@ -95,7 +97,9 @@ const GamePage: NextPage = () => {
             <Pieces
               key="X"
               player="X"
-              disabled={gameState.turn === 'O' || gameState.winner !== null}
+              disabled={
+                gameState.turn === 'O' || gameState.winner !== null || isDraw
+              }
               moveHistory={gameState.moves}
             />
             <div className="grid grid-cols-3 gap-2">
@@ -114,7 +118,9 @@ const GamePage: NextPage = () => {
             <Pieces
               key="O"
               player="O"
-              disabled={gameState.turn === 'X' || gameState.winner !== null}
+              disabled={
+                gameState.turn === 'X' || gameState.winner !== null || isDraw
+              }
               moveHistory={gameState.moves}
             />
           </div>
@@ -134,7 +140,7 @@ const GamePage: NextPage = () => {
                 </Button>
               </>
             )}
-            {!gameState.winner && isTie && (
+            {!gameState.winner && isDraw && (
               <>
                 <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
                   It&apos;s a tie!
@@ -144,7 +150,7 @@ const GamePage: NextPage = () => {
                 </Button>
               </>
             )}
-            {!gameState.winner && !isTie && (
+            {!gameState.winner && !isDraw && (
               <>
                 <div
                   className={cn('transition-all duration-300', {
@@ -154,7 +160,7 @@ const GamePage: NextPage = () => {
                   <Pieces
                     key="X"
                     player="X"
-                    disabled={gameState.winner !== null}
+                    disabled={gameState.winner !== null || isDraw}
                     moveHistory={gameState.moves}
                     isMobile
                   />
@@ -167,7 +173,7 @@ const GamePage: NextPage = () => {
                   <Pieces
                     key="O"
                     player="O"
-                    disabled={gameState.winner !== null}
+                    disabled={gameState.winner !== null || isDraw}
                     moveHistory={gameState.moves}
                     isMobile
                   />
