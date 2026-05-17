@@ -93,7 +93,7 @@ const GamePage: NextPage = () => {
       </Head>
       <DndContext onDragEnd={handleDragEnd}>
         <DefaultLayout>
-          <div className="grid place-items-center gap-8 lg:grid-cols-3">
+          <div className="grid place-items-center gap-8 xl:grid-cols-3">
             <Pieces
               key="X"
               player="X"

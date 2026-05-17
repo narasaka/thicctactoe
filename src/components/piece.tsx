@@ -33,7 +33,11 @@ interface Props extends PieceProps {
   disabled?: boolean;
 }
 
-const ICON_PROPS = { size: 32, fill: 'currentColor', strokeWidth: 0 } as const;
+const ICON_PROPS = {
+  fill: 'currentColor',
+  strokeWidth: 0,
+  className: 'h-5 w-5 md:h-8 md:w-8',
+} as const;
 
 const Piece: React.FC<Props> = ({ id, player, disabled, inTile, size }) => {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
