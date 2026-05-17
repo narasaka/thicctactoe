@@ -21,8 +21,8 @@ saw [gobblet gobblers](https://duckduckgo.com/?q=gobblet+gobblers) and wanted an
 ```
 git clone git@github.com:narasaka/thicctactoe.git
 cd thicctactoe
-yarn
-yarn dev
+pnpm install
+pnpm dev
 ```
 <hr>
 
