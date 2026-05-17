@@ -1,4 +1,14 @@
-import type { Tile } from './models';
+import type { Move, Player, Tile } from './models';
+
+const pieceInventory = {
+  small: 5,
+  medium: 3,
+  large: 1,
+} as const;
+
+type PieceSize = keyof typeof pieceInventory;
+
+const pieceSizes = ['small', 'medium', 'large'] as const;
 
 export const checkWinner = (board: Tile[]) => {
   const winningCombinations = [
@@ -25,7 +35,7 @@ export const checkWinner = (board: Tile[]) => {
   return null;
 };
 
-export const numerizedSize = (size: string) => {
+export const numerizedSize = (size: string | null | undefined) => {
   switch (size) {
     case 'small':
       return 1;
@@ -36,6 +46,33 @@ export const numerizedSize = (size: string) => {
     default:
       return 0;
   }
+};
+
+export const hasLegalMove = (board: Tile[], moves: Move[], player: Player) => {
+  if (!player) return false;
+
+  const remainingPieces: Record<PieceSize, number> = { ...pieceInventory };
+
+  for (const move of moves) {
+    if (move.player !== player) continue;
+
+    const size = idToSize(move.piece);
+    remainingPieces[size] -= 1;
+  }
+
+  return board.some((tile) => {
+    if (tile.player === null || tile.piece === null || !tile.size) {
+      return pieceSizes.some((size) => remainingPieces[size] > 0);
+    }
+
+    const tileSize = tile.size;
+
+    return pieceSizes.some((size) => {
+      if (remainingPieces[size] <= 0) return false;
+
+      return numerizedSize(size) > numerizedSize(tileSize);
+    });
+  });
 };
 
 export const idToNumerizedSize = (id: string) => {
