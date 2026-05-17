@@ -2,7 +2,7 @@ import { type UniqueIdentifier, useDroppable } from '@dnd-kit/core';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 const cell = cva(
-  'grid min-w-[5rem] min-h-[5rem] sm:min-w-[6rem] sm:min-h-[6rem] place-items-center rounded shadow-lg transition-all duration-500',
+  'grid min-w-[6rem] min-h-[6rem] sm:min-w-[7.5rem] sm:min-h-[7.5rem] place-items-center rounded shadow-lg transition-all duration-500',
   {
     variants: {
       isOver: {
