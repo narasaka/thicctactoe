@@ -1,14 +1,14 @@
 import type { Move, Player, Tile } from './models';
 
-const pieceInventory = {
+const PIECE_INVENTORY = {
   small: 5,
   medium: 3,
   large: 1,
 } as const;
 
-type PieceSize = keyof typeof pieceInventory;
+type PieceSize = keyof typeof PIECE_INVENTORY;
 
-const pieceSizes = ['small', 'medium', 'large'] as const;
+const PIECE_SIZES = ['small', 'medium', 'large'] as const;
 
 export const checkWinner = (board: Tile[]) => {
   const winningCombinations = [
@@ -51,7 +51,7 @@ export const numerizedSize = (size: string | null | undefined) => {
 export const hasLegalMove = (board: Tile[], moves: Move[], player: Player) => {
   if (!player) return false;
 
-  const remainingPieces: Record<PieceSize, number> = { ...pieceInventory };
+  const remainingPieces: Record<PieceSize, number> = { ...PIECE_INVENTORY };
 
   for (const move of moves) {
     if (move.player !== player) continue;
@@ -62,12 +62,12 @@ export const hasLegalMove = (board: Tile[], moves: Move[], player: Player) => {
 
   return board.some((tile) => {
     if (tile.player === null || tile.piece === null || !tile.size) {
-      return pieceSizes.some((size) => remainingPieces[size] > 0);
+      return PIECE_SIZES.some((size) => remainingPieces[size] > 0);
     }
 
     const tileSize = tile.size;
 
-    return pieceSizes.some((size) => {
+    return PIECE_SIZES.some((size) => {
       if (remainingPieces[size] <= 0) return false;
 
       return numerizedSize(size) > numerizedSize(tileSize);

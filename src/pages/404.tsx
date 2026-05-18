@@ -1,5 +1,5 @@
-import Button from '@/components/Button';
-import DefaultLayout from '@/layouts/DefaultLayout';
+import Button from '@/components/button';
+import DefaultLayout from '@/layouts/default-layout';
 import { type NextPage } from 'next';
 import Head from 'next/head';
 import { useRouter } from 'next/router';

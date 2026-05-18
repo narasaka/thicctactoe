@@ -1,20 +1,20 @@
-import DefaultLayout from '@/layouts/DefaultLayout';
+import DefaultLayout from '@/layouts/default-layout';
 import type { NextPage } from 'next';
 import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import Head from 'next/head';
 import { useEffect, useRef, useState } from 'react';
-import Piece from '@/components/Piece';
-import Cell from '@/components/Cell';
+import Piece from '@/components/piece';
+import Cell from '@/components/cell';
 import { type GameState, type Size, tileSchema } from '@/models';
-import Pieces from '@/components/Pieces';
+import Pieces from '@/components/pieces';
 import { checkWinner, hasLegalMove, idToSize, numerizedSize } from '@/utils';
-import Button from '@/components/Button';
+import Button from '@/components/button';
 import autoAnimate from '@formkit/auto-animate';
 import cn from 'classnames';
 
-const cellNames = 'ABCDEFGHI';
-const initialGameState: GameState = {
-  board: cellNames
+const CELL_NAMES = 'ABCDEFGHI';
+const INITIAL_GAME_STATE: GameState = {
+  board: CELL_NAMES
     .split('')
     .map((name) => ({ player: null, piece: null, id: name, size: null })),
   turn: 'X',
@@ -23,7 +23,7 @@ const initialGameState: GameState = {
 };
 
 const GamePage: NextPage = () => {
-  const [gameState, setGameState] = useState<GameState>(initialGameState);
+  const [gameState, setGameState] = useState<GameState>(INITIAL_GAME_STATE);
   const winnerContainer = useRef<HTMLDivElement>(null);
   const mobilePieceContainer = useRef<HTMLDivElement>(null);
   const isDraw =
@@ -93,7 +93,7 @@ const GamePage: NextPage = () => {
       </Head>
       <DndContext onDragEnd={handleDragEnd}>
         <DefaultLayout>
-          <div className="grid place-items-center gap-8 lg:grid-cols-3">
+          <div className="grid place-items-center gap-8 xl:grid-cols-3">
             <Pieces
               key="X"
               player="X"
@@ -135,7 +135,7 @@ const GamePage: NextPage = () => {
                 <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
                   {gameState.winner === 'X' ? 'Green wins' : 'Purple wins'}
                 </div>
-                <Button onClick={() => setGameState(initialGameState)}>
+                <Button onClick={() => setGameState(INITIAL_GAME_STATE)}>
                   Play again
                 </Button>
               </>
@@ -145,7 +145,7 @@ const GamePage: NextPage = () => {
                 <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
                   It&apos;s a tie!
                 </div>
-                <Button onClick={() => setGameState(initialGameState)}>
+                <Button onClick={() => setGameState(INITIAL_GAME_STATE)}>
                   Play again
                 </Button>
               </>
