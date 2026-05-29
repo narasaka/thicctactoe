@@ -27,6 +27,14 @@ const Home: NextPage = () => {
             Play online (coming soon!)
           </Button>
         </div>
+        <div className="mt-2 text-center">
+          <button
+            onClick={() => void router.push('/tutorial')}
+            className="text-sm text-neutral-500 underline hover:text-neutral-700"
+          >
+            How to play
+          </button>
+        </div>
       </DefaultLayout>
     </>
   );
