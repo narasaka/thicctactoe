@@ -27,15 +27,17 @@ function LocalGamePage() {
       <GameBoard
         key={round}
         game={game}
-        controls={PLAYERS}
+        seats={PLAYERS}
         onMove={(move) => {
           const result = play(game, move);
           if (result.ok) setGame(result.game);
         }}
         status={
-          outcome.status !== "playing" && (
+          outcome.status === "playing" ? (
+            <div className="text-gray-500">{PLAYER_NAMES[game.turn]}&apos;s turn</div>
+          ) : (
             <>
-              <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
+              <div className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
                 {outcome.status === "won" ? `${PLAYER_NAMES[outcome.winner]} wins` : "It's a tie!"}
               </div>
               <Button onClick={restart}>Play again</Button>

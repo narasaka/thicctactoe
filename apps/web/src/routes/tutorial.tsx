@@ -37,7 +37,7 @@ const pieceVariants = cva(
 );
 
 const cellVariants = cva(
-  "grid min-w-[6rem] min-h-[6rem] sm:min-w-[7.5rem] sm:min-h-[7.5rem] place-items-center rounded shadow-lg transition-all duration-500",
+  "grid size-24 place-items-center rounded shadow-lg transition-all duration-500 sm:size-30",
   {
     variants: {
       isOver: {
@@ -144,7 +144,7 @@ function Step1Content() {
   return (
     <div className="flex flex-col items-center gap-6">
       <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Your Pieces</h2>
-      <p className="max-w-sm text-center text-neutral-600">
+      <p className="min-h-18 max-w-sm text-center text-neutral-600">
         You have <span className="font-bold">3 sizes</span> of pieces. More sides means bigger:
         triangle (3) &lt; square (4) &lt; pentagon (5).
       </p>
@@ -198,7 +198,7 @@ function Step2Content({ onComplete, completed }: InteractiveStepProps) {
     <DndContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col items-center gap-6">
         <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Place a Piece</h2>
-        <p className="max-w-sm text-center text-neutral-600">
+        <p className="min-h-18 max-w-sm text-center text-neutral-600">
           Drag a piece onto the board to claim a cell.
         </p>
 
@@ -222,7 +222,8 @@ function Step2Content({ onComplete, completed }: InteractiveStepProps) {
           })}
         </div>
 
-        <div className="flex flex-col items-center gap-2">
+        {/* Fixed height: swapping the piece for the success message must not move the board. */}
+        <div className="flex h-28 flex-col items-center justify-center gap-2">
           {!showPlaced ? (
             <>
               <TutorialPiece id="drag-piece-step2" size="medium" player="X" />
@@ -261,7 +262,7 @@ function Step3Content({ onComplete, completed }: InteractiveStepProps) {
     <DndContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col items-center gap-6">
         <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Gobble!</h2>
-        <p className="max-w-sm text-center text-neutral-600">
+        <p className="min-h-18 max-w-sm text-center text-neutral-600">
           A <span className="font-bold">larger</span> piece can cover a smaller one. Try gobbling
           the opponent&apos;s piece!
         </p>
@@ -290,7 +291,8 @@ function Step3Content({ onComplete, completed }: InteractiveStepProps) {
           })}
         </div>
 
-        <div className="flex flex-col items-center gap-2">
+        {/* Fixed height: swapping the piece for the success message must not move the board. */}
+        <div className="flex h-28 flex-col items-center justify-center gap-2">
           {!showGobbled ? (
             <>
               <TutorialPiece id="drag-piece-step3" size="large" player="X" />
@@ -329,7 +331,7 @@ function Step4Content({ onComplete, completed }: InteractiveStepProps) {
     <DndContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col items-center gap-6">
         <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Three in a Row</h2>
-        <p className="max-w-sm text-center text-neutral-600">
+        <p className="min-h-18 max-w-sm text-center text-neutral-600">
           Get three of your <span className="font-bold">visible</span> pieces in a line — row,
           column, or diagonal. Complete the top row.
         </p>
@@ -358,7 +360,8 @@ function Step4Content({ onComplete, completed }: InteractiveStepProps) {
           })}
         </div>
 
-        <div className="flex flex-col items-center gap-2">
+        {/* Fixed height: swapping the piece for the success message must not move the board. */}
+        <div className="flex h-28 flex-col items-center justify-center gap-2">
           {!showWon ? (
             <>
               <TutorialPiece id="drag-piece-step4" size="medium" player="X" />
@@ -379,7 +382,7 @@ function Step5Content() {
   return (
     <div className="flex flex-col items-center gap-6">
       <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">You&apos;re Ready!</h2>
-      <p className="max-w-sm text-center text-neutral-600">
+      <p className="min-h-18 max-w-sm text-center text-neutral-600">
         You know everything you need. Time to play!
       </p>
 
@@ -440,6 +443,8 @@ function TutorialPage() {
   }, []);
 
   const canAdvance = step === 0 || step === 4 || completedSteps.has(step);
+  const lastStep = step === TOTAL_STEPS - 1;
+  const showBack = step > 0 && !lastStep;
 
   const goNext = () => {
     if (step < TOTAL_STEPS - 1) setStep(step + 1);
@@ -452,21 +457,44 @@ function TutorialPage() {
   return (
     <>
       <main className="relative flex min-h-dvh flex-col items-center justify-center bg-neutral-100 p-4">
-        <div className="flex w-full max-w-lg flex-1 flex-col items-center justify-center">
-          {step === 0 && <Step1Content />}
-          {step === 1 && (
-            <Step2Content onComplete={() => markComplete(1)} completed={completedSteps.has(1)} />
-          )}
-          {step === 2 && (
-            <Step3Content onComplete={() => markComplete(2)} completed={completedSteps.has(2)} />
-          )}
-          {step === 3 && (
-            <Step4Content onComplete={() => markComplete(3)} completed={completedSteps.has(3)} />
-          )}
-          {step === 4 && <Step5Content />}
+        {/*
+          Every step is rendered in the same grid cell and only the current one is
+          visible, so the stage is always as tall as the tallest step and moving
+          between steps never shifts the title or the navigation.
+        */}
+        <div className="grid w-full max-w-lg">
+          {[
+            <Step1Content key={0} />,
+            <Step2Content
+              key={1}
+              onComplete={() => markComplete(1)}
+              completed={completedSteps.has(1)}
+            />,
+            <Step3Content
+              key={2}
+              onComplete={() => markComplete(2)}
+              completed={completedSteps.has(2)}
+            />,
+            <Step4Content
+              key={3}
+              onComplete={() => markComplete(3)}
+              completed={completedSteps.has(3)}
+            />,
+            <Step5Content key={4} />,
+          ].map((content, index) => (
+            <div
+              key={index}
+              inert={index !== step}
+              className={
+                index === step ? "col-start-1 row-start-1" : "invisible col-start-1 row-start-1"
+              }
+            >
+              {content}
+            </div>
+          ))}
         </div>
 
-        <div className="flex w-full max-w-lg flex-col items-center gap-4 pb-4">
+        <div className="mt-8 flex w-full max-w-lg flex-col items-center gap-4 pb-4">
           <div className="flex items-center gap-2">
             {Array.from({ length: TOTAL_STEPS }, (_, i) => {
               let dotClass = "h-2.5 w-2.5 rounded-full transition-all duration-200";
@@ -482,33 +510,40 @@ function TutorialPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            {step > 0 && step < TOTAL_STEPS - 1 && (
-              <button onClick={goBack} className={buttonVariants({ intent: "secondary" })}>
-                <ChevronLeft className="mr-1 inline h-4 w-4" />
-                Back
-              </button>
-            )}
-
-            {step < TOTAL_STEPS - 1 && (
-              <button
-                onClick={goNext}
-                disabled={!canAdvance}
-                className={buttonVariants({
-                  intent: "primary",
-                  disabled: !canAdvance || undefined,
-                })}
-              >
-                Next
-                <ChevronRight className="ml-1 inline h-4 w-4" />
-              </button>
-            )}
+            {/* Hidden rather than removed, so the controls never move. */}
+            <button
+              onClick={goBack}
+              inert={!showBack}
+              className={buttonVariants({
+                intent: "secondary",
+                className: !showBack && "invisible",
+              })}
+            >
+              <ChevronLeft className="mr-1 inline h-4 w-4" />
+              Back
+            </button>
+            <button
+              onClick={goNext}
+              disabled={!canAdvance}
+              inert={lastStep}
+              className={buttonVariants({
+                intent: "primary",
+                disabled: !canAdvance || undefined,
+                className: lastStep && "invisible",
+              })}
+            >
+              Next
+              <ChevronRight className="ml-1 inline h-4 w-4" />
+            </button>
           </div>
 
-          {step < TOTAL_STEPS - 1 && (
-            <Link to="/game" className="text-xs text-neutral-400 underline hover:text-neutral-600">
-              Skip tutorial
-            </Link>
-          )}
+          <Link
+            to="/game"
+            inert={lastStep}
+            className={`text-xs text-neutral-400 underline hover:text-neutral-600 ${lastStep ? "invisible" : ""}`}
+          >
+            Skip tutorial
+          </Link>
         </div>
       </main>
     </>

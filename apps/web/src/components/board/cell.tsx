@@ -5,7 +5,7 @@ import { cva } from "class-variance-authority";
 import { PieceView } from "./piece";
 
 const cell = cva(
-  "grid min-h-24 min-w-24 place-items-center rounded shadow-lg transition-all duration-500 sm:min-h-30 sm:min-w-30",
+  "grid size-24 place-items-center rounded shadow-lg transition-all duration-500 sm:size-30",
   {
     variants: {
       isOver: {

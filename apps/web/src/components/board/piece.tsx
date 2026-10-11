@@ -58,7 +58,7 @@ export function DraggablePiece({
 }: PieceProps & { id: string; disabled: boolean }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id, disabled });
   return (
-    <button ref={setNodeRef} type="button" {...listeners} {...attributes}>
+    <button ref={setNodeRef} type="button" data-slot={id} {...listeners} {...attributes}>
       <PieceView
         {...pieceProps}
         disabled={disabled}

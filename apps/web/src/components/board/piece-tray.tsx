@@ -1,9 +1,7 @@
-import autoAnimate from "@formkit/auto-animate";
-import { type Player, SIZES, type Size } from "@thicctactoe/game";
+import { INVENTORY, type Player, SIZES, type Size } from "@thicctactoe/game";
 import { cva } from "class-variance-authority";
-import { useEffect, useRef } from "react";
 
-import { DraggablePiece } from "./piece";
+import { DraggablePiece, PieceView } from "./piece";
 import { type Slot, type TrayVariant, slotId, slotsInTray } from "./tray";
 
 const tray = cva("grid-cols-3 place-items-center gap-4", {
@@ -15,6 +13,10 @@ const tray = cva("grid-cols-3 place-items-center gap-4", {
   },
 });
 
+/**
+ * One player's pieces. Every slot keeps its place after its piece is played,
+ * so the tray (and everything around it) never changes size.
+ */
 export default function PieceTray({
   variant,
   player,
@@ -28,21 +30,19 @@ export default function PieceTray({
   played: readonly Slot[];
   disabled: boolean;
 }) {
-  const parent = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (variant === "desktop" && parent.current) autoAnimate(parent.current);
-  }, [variant]);
-
   return (
-    <div className={tray({ variant })} ref={parent}>
+    <div className={tray({ variant })}>
       {SIZES.flatMap((size) => {
         const playedHere = played
           .filter((slot) => slot.player === player && slot.size === size)
           .map((slot) => slot.index);
-        return slotsInTray(size, left[size], playedHere).map((index) => {
+        const inTray = new Set(slotsInTray(size, left[size], playedHere));
+        return Array.from({ length: INVENTORY[size] }, (_, index) => {
           const id = slotId(variant, { player, size, index });
-          return (
+          return inTray.has(index) ? (
             <DraggablePiece key={id} id={id} player={player} size={size} disabled={disabled} />
+          ) : (
+            <PieceView key={id} player={player} size={size} className="invisible" aria-hidden />
           );
         });
       })}
