@@ -1,0 +1,48 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { type Game, PLAYERS, newGame, play } from "@thicctactoe/game";
+import { useState } from "react";
+
+import GameBoard from "@/components/board/game-board";
+import Button from "@/components/button";
+import Layout from "@/components/layout";
+
+export const Route = createFileRoute("/game")({
+  component: LocalGamePage,
+});
+
+const PLAYER_NAMES = { X: "Green", O: "Purple" } as const;
+
+function LocalGamePage() {
+  const [game, setGame] = useState<Game>(newGame);
+  const [round, setRound] = useState(0);
+  const { outcome } = game;
+
+  const restart = () => {
+    setGame(newGame());
+    setRound((n) => n + 1);
+  };
+
+  return (
+    <Layout>
+      <GameBoard
+        key={round}
+        game={game}
+        controls={PLAYERS}
+        onMove={(move) => {
+          const result = play(game, move);
+          if (result.ok) setGame(result.game);
+        }}
+        status={
+          outcome.status !== "playing" && (
+            <>
+              <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
+                {outcome.status === "won" ? `${PLAYER_NAMES[outcome.winner]} wins` : "It's a tie!"}
+              </div>
+              <Button onClick={restart}>Play again</Button>
+            </>
+          )
+        }
+      />
+    </Layout>
+  );
+}
