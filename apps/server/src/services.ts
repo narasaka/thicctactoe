@@ -6,7 +6,7 @@ import { S3Client } from "bun";
 import { eq } from "drizzle-orm";
 
 import { createAvatars } from "./avatars";
-import { ENV } from "./env.server";
+import { ENV } from "./env";
 
 export const db = createDb(ENV);
 export const arena = createArena({ db });

@@ -13,8 +13,8 @@ apps/web/src/routeTree.gen.ts
 local.db
 local.db-*
 
-# Environment variables
-.env
+# Environment variables (env files are committed encrypted; see dotenvx)
+.env.keys
 .env*.local
 
 # IDEs and editors

@@ -8,11 +8,11 @@
   "scripts": {
     "build": "tsc -b",
     "check-types": "tsc -b",
-    "db:push": "drizzle-kit push",
+    "db:push": "dotenvx run -f ../../apps/server/.env -fk ../../.env.keys -- drizzle-kit push",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:deploy": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio",
-    "db:migrate": "drizzle-kit migrate"
+    "db:studio": "dotenvx run -f ../../apps/server/.env -fk ../../.env.keys -- drizzle-kit studio",
+    "db:migrate": "dotenvx run -f ../../apps/server/.env -fk ../../.env.keys -- drizzle-kit migrate",
+    "db:migrate:production": "dotenvx run -f ../../apps/server/.env.production -fk ../../.env.keys -- drizzle-kit migrate"
   },
   "dependencies": {
     "@thicctactoe/game": "workspace:*",
@@ -22,10 +22,10 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@dotenvx/dotenvx": "^2.34.2",
     "@thicctactoe/config": "workspace:*",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "1.0.0-rc.4",
-    "typescript": "catalog:",
-    "varlock": "catalog:"
+    "typescript": "catalog:"
   }
 }

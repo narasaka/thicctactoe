@@ -6,14 +6,14 @@
     "build": "tsc -b ../../packages/api && tsdown",
     "check-types": "tsc -b ../../packages/api && tsc --noEmit",
     "compile": "bun build --compile --no-compile-autoload-dotenv --minify --sourcemap --bytecode ./src/index.ts --outfile server",
-    "dev": "bun run --hot src/index.ts",
-    "start": "bun run dist/index.mjs",
-    "env:generate": "varlock codegen",
-    "auth:generate": "varlock run -- bun x auth@latest generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes"
+    "dev": "dotenvx run -fk ../../.env.keys -- bun run --hot src/index.ts",
+    "start": "dotenvx run -f .env.production -fk ../../.env.keys -- bun run dist/index.mjs",
+    "auth:generate": "dotenvx run -fk ../../.env.keys -- bun x auth@latest generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes"
   },
   "dependencies": {
     "@dicebear/core": "^10.7.0",
     "@dicebear/styles": "^10.6.0",
+    "@dotenvx/dotenvx": "^2.34.2",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
@@ -23,7 +23,6 @@
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",
     "hono": "^4.13.7",
-    "varlock": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -28,10 +28,9 @@ node_modules/
 /.pnp
 .pnp.*
 
-# env
-.env*
-.env.production
-!.env.example
+# env (.env and .env.production are committed encrypted)
+.env.keys
+.env*.local
 .dev.vars
 
 # logs
@@ -54,5 +53,3 @@ lerna-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
-!.env.schema
-/src/env.ts

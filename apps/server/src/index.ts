@@ -9,7 +9,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
 import { createContext } from "./context";
-import { ENV } from "./env.server";
+import { ENV } from "./env";
 import { auth, avatars } from "./services";
 
 const app = new Hono();
