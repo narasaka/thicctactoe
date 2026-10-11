@@ -17,7 +17,6 @@ import { ratingChange } from "./rating";
 export type Arena = ReturnType<typeof createArena>;
 
 export type PlayerView = {
-  id: string;
   name: string;
   image: string | null;
   anonymous: boolean;
@@ -25,11 +24,14 @@ export type PlayerView = {
   online: boolean;
 };
 
+/** A game as one viewer sees it. Internal user ids never leave the server. */
 export type MatchView = {
+  /** Public id, as used in game links. */
   id: string;
   status: "waiting" | "active" | "finished" | "cancelled";
   private: boolean;
-  createdBy: string | null;
+  /** The viewer's seat, or null for spectators. */
+  seat: Player | null;
   players: Record<Player, PlayerView | null>;
   moves: Move[];
   winner: Player | null;
@@ -39,7 +41,6 @@ export type MatchView = {
 
 export type LeaderboardEntry = {
   rank: number;
-  id: string;
   name: string;
   image: string | null;
   rating: number;
@@ -49,6 +50,8 @@ export type LeaderboardEntry = {
 };
 
 type GameRow = typeof gameTable.$inferSelect;
+/** What is published to watchers: the shared view plus who sits where. */
+type Snapshot = { view: Omit<MatchView, "seat">; seats: Record<Player, string | null> };
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export type ArenaOptions = {
@@ -64,7 +67,7 @@ export function createArena({
   matchmakingWindowMs = 10 * 60_000,
   abandonGraceMs = 30_000,
 }: ArenaOptions) {
-  const publisher = new EventPublisher<Record<string, MatchView>>();
+  const publisher = new EventPublisher<Record<string, Snapshot>>();
   /** gameId -> userId -> open watch streams */
   const presence = new Map<string, Map<string, number>>();
   const abandonTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -72,8 +75,8 @@ export function createArena({
   const isOnline = (gameId: string, userId: string | null) =>
     userId !== null && (presence.get(gameId)?.get(userId) ?? 0) > 0;
 
-  async function view(gameId: string): Promise<MatchView> {
-    const row = await db.query.game.findFirst({ where: { id: gameId } });
+  async function snapshot(gameId: string): Promise<Snapshot> {
+    const row = await db.query.game.findFirst({ where: { publicId: gameId } });
     if (!row) throw new ORPCError("NOT_FOUND", { message: "Game not found" });
 
     const ids = [row.playerX, row.playerO].filter((id) => id !== null);
@@ -94,7 +97,8 @@ export function createArena({
       const found = players.find((p) => p.id === userId);
       if (!found) return null;
       return {
-        ...found,
+        name: found.name,
+        image: found.image,
         anonymous: found.anonymous ?? false,
         rating: found.rating ?? 1000,
         online: isOnline(gameId, found.id),
@@ -102,24 +106,40 @@ export function createArena({
     };
 
     return {
-      id: row.id,
-      status: row.status,
-      private: row.private,
-      createdBy: row.createdBy,
-      players: { X: seat(row.playerX), O: seat(row.playerO) },
-      moves: row.moves,
-      winner: row.winner,
-      endReason: row.endReason,
-      ratingDelta: row.ratingDelta,
+      view: {
+        id: row.publicId,
+        status: row.status,
+        private: row.private,
+        players: { X: seat(row.playerX), O: seat(row.playerO) },
+        moves: row.moves,
+        winner: row.winner,
+        endReason: row.endReason,
+        ratingDelta: row.ratingDelta,
+      },
+      seats: { X: row.playerX, O: row.playerO },
     };
   }
 
+  function forViewer({ view, seats }: Snapshot, viewerId: string | null): MatchView {
+    const seat =
+      viewerId === null ? null : seats.X === viewerId ? "X" : seats.O === viewerId ? "O" : null;
+    return { ...view, seat };
+  }
+
+  async function view(gameId: string, viewerId: string | null): Promise<MatchView> {
+    return forViewer(await snapshot(gameId), viewerId);
+  }
+
   async function broadcast(gameId: string) {
-    publisher.publish(gameId, await view(gameId));
+    publisher.publish(gameId, await snapshot(gameId));
   }
 
   async function lock(tx: Tx, gameId: string) {
-    const [row] = await tx.select().from(gameTable).where(eq(gameTable.id, gameId)).for("update");
+    const [row] = await tx
+      .select()
+      .from(gameTable)
+      .where(eq(gameTable.publicId, gameId))
+      .for("update");
     if (!row) throw new ORPCError("NOT_FOUND", { message: "Game not found" });
     return row;
   }
@@ -140,14 +160,13 @@ export function createArena({
     const [row] = await tx
       .insert(gameTable)
       .values({
-        id: newGameId(),
         private: isPrivate,
         createdBy: userId,
         playerX: seat === "X" ? userId : null,
         playerO: seat === "O" ? userId : null,
       })
-      .returning({ id: gameTable.id });
-    return row!.id;
+      .returning({ publicId: gameTable.publicId });
+    return row!.publicId;
   }
 
   async function seat(tx: Tx, row: GameRow, userId: string) {
@@ -238,7 +257,7 @@ export function createArena({
     const [cancelled] = await db
       .update(gameTable)
       .set({ status: "cancelled" })
-      .where(and(eq(gameTable.id, gameId), eq(gameTable.status, "waiting")))
+      .where(and(eq(gameTable.publicId, gameId), eq(gameTable.status, "waiting")))
       .returning({ id: gameTable.id });
     if (cancelled) await broadcast(gameId);
   }
@@ -250,7 +269,7 @@ export function createArena({
     async quickMatch(userId: string): Promise<string> {
       const { id, joined } = await db.transaction(async (tx) => {
         const [own] = await tx
-          .select({ id: gameTable.id })
+          .select({ id: gameTable.publicId })
           .from(gameTable)
           .where(
             and(
@@ -278,7 +297,7 @@ export function createArena({
           .for("update", { skipLocked: true });
         if (open) {
           await seat(tx, open, userId);
-          return { id: open.id, joined: true };
+          return { id: open.publicId, joined: true };
         }
         return { id: await create(tx, userId, false), joined: false };
       });
@@ -305,7 +324,7 @@ export function createArena({
         return true;
       });
       if (joined) await broadcast(gameId);
-      return view(gameId);
+      return view(gameId, userId);
     },
 
     async move(gameId: string, userId: string, move: Move): Promise<MatchView> {
@@ -324,10 +343,10 @@ export function createArena({
         const { outcome } = result.game;
         if (outcome.status === "won") return finish(tx, row, outcome.winner, "line", moves);
         if (outcome.status === "draw") return finish(tx, row, null, "draw", moves);
-        await tx.update(gameTable).set({ moves }).where(eq(gameTable.id, gameId));
+        await tx.update(gameTable).set({ moves }).where(eq(gameTable.id, row.id));
       });
       await broadcast(gameId);
-      return view(gameId);
+      return view(gameId, userId);
     },
 
     async resign(gameId: string, userId: string): Promise<MatchView> {
@@ -341,7 +360,7 @@ export function createArena({
         await finish(tx, row, other(seat), "resign");
       });
       await broadcast(gameId);
-      return view(gameId);
+      return view(gameId, userId);
     },
 
     /** Withdraws a game that is still waiting for an opponent. */
@@ -354,10 +373,10 @@ export function createArena({
         if (row.status !== "waiting") {
           throw new ORPCError("CONFLICT", { message: "This game has already started" });
         }
-        await tx.update(gameTable).set({ status: "cancelled" }).where(eq(gameTable.id, gameId));
+        await tx.update(gameTable).set({ status: "cancelled" }).where(eq(gameTable.id, row.id));
       });
       await broadcast(gameId);
-      return view(gameId);
+      return view(gameId, userId);
     },
 
     /**
@@ -366,18 +385,17 @@ export function createArena({
      */
     async *watch(gameId: string, userId: string | null, signal?: AbortSignal) {
       const updates = publisher.subscribe(gameId, { signal });
-      const initial = await view(gameId);
-      const player =
-        userId !== null && (initial.players.X?.id === userId || initial.players.O?.id === userId);
+      const initial = await snapshot(gameId);
+      const player = userId !== null && forViewer(initial, userId).seat !== null;
       try {
         if (player) {
           // Announce the player as online; this stream receives that update too.
           connect(gameId, userId);
           await broadcast(gameId);
         } else {
-          yield initial;
+          yield forViewer(initial, userId);
         }
-        for await (const update of updates) yield update;
+        for await (const update of updates) yield forViewer(update, userId);
       } finally {
         if (player) {
           disconnect(gameId, userId);
@@ -390,7 +408,6 @@ export function createArena({
     async leaderboard(limit = 50): Promise<LeaderboardEntry[]> {
       const rows = await db
         .select({
-          id: user.id,
           name: user.name,
           image: user.image,
           rating: playerStats.rating,
@@ -431,7 +448,13 @@ export function createArena({
         if (!from) return;
         await tx
           .insert(playerStats)
-          .values({ ...from, userId: toId })
+          .values({
+            userId: toId,
+            rating: from.rating,
+            wins: from.wins,
+            losses: from.losses,
+            draws: from.draws,
+          })
           .onConflictDoUpdate({
             target: playerStats.userId,
             set: {
@@ -445,11 +468,4 @@ export function createArena({
       });
     },
   };
-}
-
-const ID_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
-
-function newGameId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(10));
-  return Array.from(bytes, (byte) => ID_ALPHABET[byte % ID_ALPHABET.length]).join("");
 }

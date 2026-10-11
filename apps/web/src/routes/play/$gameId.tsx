@@ -1,5 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type Player, other } from "@thicctactoe/game";
+import { cn } from "@thicctactoe/ui/lib/utils";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 
@@ -22,12 +23,11 @@ const COLOR_NAMES = { X: "Green", O: "Purple" } as const;
 function MatchPage() {
   const { gameId } = Route.useParams();
   const session = useGuestSession();
-  const userId = session?.user.id;
-  const match = useMatch(gameId, userId);
+  const match = useMatch(gameId, session?.user.id);
   const { view, game, seat, error, join } = match;
 
-  // Opening an invite link joins the game.
-  const joinable = view?.status === "waiting" && userId && !seat && view.createdBy !== userId;
+  // Opening an invite link joins the game (the host already has a seat).
+  const joinable = view?.status === "waiting" && session && seat === null;
   useEffect(() => {
     if (joinable && join.isIdle) join.mutate();
   }, [joinable, join]);
@@ -48,14 +48,9 @@ function MatchPage() {
       </Layout>
     );
   }
-  if (view.status === "waiting")
-    return (
-      <WaitingRoom
-        view={view}
-        host={view.createdBy === userId}
-        cancel={() => match.cancel.mutate()}
-      />
-    );
+  if (view.status === "waiting") {
+    return <WaitingRoom view={view} cancel={() => match.cancel.mutate()} />;
+  }
   if (view.status === "cancelled") {
     return (
       <Message title="Game cancelled">
@@ -87,29 +82,23 @@ function MatchPage() {
       <GameBoard
         key={view.id}
         game={game}
-        controls={playing && seat ? [seat] : []}
+        seats={seat ? [seat] : []}
+        locked={!playing}
         onMove={(move) => match.move.mutate(move)}
-        status={
-          <Status view={view} seat={seat} turn={game.turn} resign={() => match.resign.mutate()} />
-        }
+        status={<Status view={view} turn={game.turn} resign={() => match.resign.mutate()} />}
       />
     </Layout>
   );
 }
 
-function Status({
-  view,
-  seat,
-  turn,
-  resign,
-}: {
-  view: MatchView;
-  seat: Player | null;
-  turn: Player;
-  resign: () => void;
-}) {
+/**
+ * Two fixed rows inside the board's fixed-height status area, so switching
+ * between turn, resign confirmation and result never moves anything.
+ */
+function Status({ view, turn, resign }: { view: MatchView; turn: Player; resign: () => void }) {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
+  const { seat } = view;
   const name = (player: Player) => view.players[player]?.name ?? COLOR_NAMES[player];
 
   if (view.status === "finished") {
@@ -127,13 +116,17 @@ function Status({
       );
     return (
       <>
-        <div className="mt-4 text-center text-4xl font-extrabold tracking-tight sm:text-5xl">
-          {headline}
+        <div className="flex h-10 items-baseline gap-2">
+          <span className="text-3xl font-extrabold tracking-tight whitespace-nowrap sm:text-4xl">
+            {headline}
+          </span>
+          {view.endReason === "resign" && view.winner && (
+            <span className="truncate text-sm text-gray-500">
+              {name(other(view.winner))} resigned
+            </span>
+          )}
         </div>
-        {view.endReason === "resign" && view.winner && (
-          <div className="text-gray-500">{name(other(view.winner))} resigned</div>
-        )}
-        <div className="flex gap-2">
+        <div className="flex h-10 gap-2">
           {seat && (
             <Button onClick={playAgain}>{view.private ? "New invite" : "Play again"}</Button>
           )}
@@ -146,16 +139,16 @@ function Status({
   }
 
   return (
-    <div className="flex items-center gap-3 text-gray-600">
-      <span>
+    <>
+      <div className="flex h-10 items-center text-gray-600">
         {seat === null
           ? `${name(turn)}'s turn`
           : turn === seat
             ? "Your turn"
             : `Waiting for ${name(turn)}…`}
-      </span>
-      {seat &&
-        (confirming ? (
+      </div>
+      <div className={cn("flex h-10 items-center gap-2", !seat && "invisible")} inert={!seat}>
+        {confirming ? (
           <>
             <Button
               intent="secondary"
@@ -175,20 +168,13 @@ function Status({
           >
             Resign
           </button>
-        ))}
-    </div>
+        )}
+      </div>
+    </>
   );
 }
 
-function WaitingRoom({
-  view,
-  host,
-  cancel,
-}: {
-  view: MatchView;
-  host: boolean;
-  cancel: () => void;
-}) {
+function WaitingRoom({ view, cancel }: { view: MatchView; cancel: () => void }) {
   const [copied, setCopied] = useState(false);
   const link = typeof window === "undefined" ? "" : window.location.href;
   const copy = () =>
@@ -207,7 +193,7 @@ function WaitingRoom({
             className="min-w-0 flex-1 bg-transparent px-2 font-mono text-sm outline-none"
             onFocus={(event) => event.target.select()}
           />
-          <Button className="py-1 text-sm" onClick={copy}>
+          <Button className="w-24 py-1 text-sm" onClick={copy}>
             {copied ? "Copied!" : "Copy link"}
           </Button>
         </div>
@@ -219,7 +205,7 @@ function WaitingRoom({
           ? "The game starts as soon as they open the link."
           : "Keep this page open; the game starts when someone joins."}
       </p>
-      {host && (
+      {view.seat && (
         <Button intent="secondary" onClick={cancel}>
           Cancel
         </Button>

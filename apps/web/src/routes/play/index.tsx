@@ -30,10 +30,12 @@ function LobbyPage() {
   return (
     <Layout className="container max-w-md text-center">
       <h1 className="text-5xl font-extrabold tracking-tight sm:text-6xl">Play online</h1>
-      <p className="mt-2 text-gray-500">
-        {session?.user.isAnonymous
-          ? `You're playing as ${session.user.name}. Sign in any time to keep your record and join the leaderboard.`
-          : "Every game counts towards the leaderboard."}
+      {/* Reserved height: the text depends on the session, which loads after first paint. */}
+      <p className="mt-2 min-h-18 text-gray-500">
+        {session &&
+          (session.user.isAnonymous
+            ? `You're playing as ${session.user.name}. Sign in any time to keep your record and join the leaderboard.`
+            : "Every game counts towards the leaderboard.")}
       </p>
       <div className="mt-6 flex flex-col gap-2 px-8 md:flex-row md:justify-center">
         <Button disabled={busy} onClick={() => quickMatch.mutate()}>

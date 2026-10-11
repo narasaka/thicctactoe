@@ -33,7 +33,9 @@ export const appRouter = {
       .handler(({ context, input }) => context.arena.cancel(input.id, context.session.user.id)),
     view: publicProcedure
       .input(gameInput)
-      .handler(({ context, input }) => context.arena.view(input.id)),
+      .handler(({ context, input }) =>
+        context.arena.view(input.id, context.session?.user.id ?? null),
+      ),
     watch: publicProcedure
       .input(gameInput)
       .handler(({ context, input, signal }) =>

@@ -17,6 +17,7 @@
   "dependencies": {
     "@thicctactoe/game": "workspace:*",
     "drizzle-orm": "catalog:",
+    "nanoid": "^6.0.2",
     "pg": "^8.23.0",
     "zod": "catalog:"
   },

@@ -42,7 +42,7 @@ function LeaderboardPage() {
             </thead>
             <tbody>
               {players.map((player) => (
-                <tr key={player.id} className="border-t border-neutral-100">
+                <tr key={player.rank} className="border-t border-neutral-100">
                   <td
                     className={cn(
                       "py-3 pl-4 font-semibold",

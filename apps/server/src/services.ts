@@ -28,11 +28,13 @@ export const avatars = createAvatars({ bucket, publicUrl: ENV.BETTER_AUTH_URL })
 
 export const auth = createAuth(ENV, db, {
   async onGuestCreated(userId) {
-    const image = await avatars.create(userId);
+    const image = await avatars.create();
     await db.update(user).set({ image }).where(eq(user.id, userId));
   },
-  async onGuestSignedIn(guestId, userId) {
-    await arena.mergePlayers(guestId, userId);
-    await avatars.remove(guestId).catch((error) => console.error("avatar cleanup failed", error));
+  async onGuestSignedIn(guest, userId) {
+    await arena.mergePlayers(guest.id, userId);
+    await avatars
+      .remove(guest.image)
+      .catch((error) => console.error("avatar cleanup failed", error));
   },
 });

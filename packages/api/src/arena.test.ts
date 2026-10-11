@@ -40,8 +40,8 @@ async function startGame() {
   const host = await addUser("host");
   const guest = await addUser("guest");
   const id = await arena.invite(host);
-  const game = await arena.join(id, guest);
-  return { id, X: game.players.X!.id, O: game.players.O!.id };
+  const { seat } = await arena.join(id, guest);
+  return seat === "X" ? { id, X: guest, O: host } : { id, X: host, O: guest };
 }
 
 const statsOf = async (userId: string) =>
@@ -63,14 +63,14 @@ describe("matchmaking", () => {
     const a = await addUser("a");
     const b = await addUser("b");
     const id = await arena.quickMatch(a);
-    expect((await arena.view(id)).status).toBe("waiting");
+    expect((await arena.view(id, a)).status).toBe("waiting");
     // Asking again while waiting returns the same game.
     expect(await arena.quickMatch(a)).toBe(id);
 
     expect(await arena.quickMatch(b)).toBe(id);
-    const game = await arena.view(id);
-    expect(game.status).toBe("active");
-    expect([game.players.X?.id, game.players.O?.id].sort()).toEqual([a, b]);
+    const [forA, forB] = [await arena.view(id, a), await arena.view(id, b)];
+    expect(forA.status).toBe("active");
+    expect([forA.seat, forB.seat].sort()).toEqual(["O", "X"]);
   });
 
   test("private games are not offered by quick match", async () => {
@@ -133,6 +133,24 @@ describe("moves", () => {
   });
 });
 
+describe("ids", () => {
+  test("games get short public ids; internal user ids never appear in views", async () => {
+    const { id, X, O } = await startGame();
+    expect(id).toMatch(/^[2-9a-km-np-z]{10}$/);
+    await db.update(user).set({ name: "Somebody" });
+    const json = JSON.stringify([await arena.view(id, X), await arena.leaderboard()]);
+    expect(json).not.toContain(X);
+    expect(json).not.toContain(O);
+  });
+
+  test("each viewer sees their own seat", async () => {
+    const { id, X, O } = await startGame();
+    expect((await arena.view(id, X)).seat).toBe("X");
+    expect((await arena.view(id, O)).seat).toBe("O");
+    expect((await arena.view(id, null)).seat).toBeNull();
+  });
+});
+
 describe("leaderboard", () => {
   test("ranks signed-in players who have played, excluding anonymous ones", async () => {
     const { id, X, O } = await startGame();
@@ -145,7 +163,7 @@ describe("leaderboard", () => {
     await db.insert(playerStats).values({ userId: "idle" });
 
     expect(await arena.leaderboard()).toEqual([
-      expect.objectContaining({ rank: 1, id: X, rating: 1016, wins: 1 }),
+      expect.objectContaining({ rank: 1, name: X, rating: 1016, wins: 1 }),
     ]);
   });
 });
@@ -162,8 +180,7 @@ describe("mergePlayers", () => {
 
     await arena.mergePlayers(X, account);
 
-    const game = await arena.view(id);
-    expect([game.players.X?.id, game.players.O?.id]).toContain(account);
+    expect((await arena.view(id, account)).seat).not.toBeNull();
     expect(await statsOf(account)).toMatchObject({ rating: 1032, wins: 2 });
     expect(await db.query.playerStats.findFirst({ where: { userId: X } })).toBeUndefined();
   });
@@ -174,7 +191,7 @@ describe("abandoned games", () => {
     const host = await addUser("host");
     const id = await arena.quickMatch(host);
     await Bun.sleep(50);
-    expect((await arena.view(id)).status).toBe("cancelled");
+    expect((await arena.view(id, null)).status).toBe("cancelled");
   });
 
   test("a waiting game survives while its host is watching", async () => {
@@ -183,7 +200,7 @@ describe("abandoned games", () => {
     const stream = arena.watch(id, host);
     await stream.next();
     await Bun.sleep(50);
-    expect((await arena.view(id)).status).toBe("waiting");
+    expect((await arena.view(id, host)).status).toBe("waiting");
     await stream.return(undefined);
   });
 });
@@ -203,7 +220,7 @@ describe("watch", () => {
 
     controller.abort();
     await stream.return(undefined);
-    expect((await arena.view(id)).players.X?.online).toBe(false);
+    expect((await arena.view(id, null)).players.X?.online).toBe(false);
   });
 
   test("a waiting game is cancelled once its host stops watching", async () => {
@@ -214,7 +231,7 @@ describe("watch", () => {
     await stream.return(undefined);
 
     await Bun.sleep(50);
-    expect((await arena.view(id)).status).toBe("cancelled");
+    expect((await arena.view(id, null)).status).toBe("cancelled");
   });
 });
 

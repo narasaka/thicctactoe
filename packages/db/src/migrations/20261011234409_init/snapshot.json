@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "fe685dbd-c0bf-4c6c-bd2f-1cd0fdabd743",
+  "id": "59d3f090-1649-4342-bdf0-5cd5a4fd2ce7",
   "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
@@ -508,6 +508,28 @@
       "table": "verification"
     },
     {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": {
+        "type": "always",
+        "name": "game_id_seq",
+        "increment": "1",
+        "startWith": "1",
+        "minValue": "1",
+        "maxValue": "9223372036854775807",
+        "cache": 1,
+        "cycle": false
+      },
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "game"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -515,7 +537,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "id",
+      "name": "public_id",
       "entityType": "columns",
       "schema": "public",
       "table": "game"
@@ -675,6 +697,28 @@
       "entityType": "columns",
       "schema": "public",
       "table": "game"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": {
+        "type": "always",
+        "name": "player_stats_id_seq",
+        "increment": "1",
+        "startWith": "1",
+        "minValue": "1",
+        "maxValue": "9223372036854775807",
+        "cache": 1,
+        "cycle": false
+      },
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "player_stats"
     },
     {
       "type": "text",
@@ -1020,7 +1064,7 @@
       "entityType": "pks"
     },
     {
-      "columns": ["user_id"],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "player_stats_pkey",
       "schema": "public",
@@ -1043,6 +1087,24 @@
       "name": "user_email_key",
       "schema": "public",
       "table": "user",
+      "entityType": "uniques"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["public_id"],
+      "nullsNotDistinct": false,
+      "name": "game_public_id_key",
+      "schema": "public",
+      "table": "game",
+      "entityType": "uniques"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "nullsNotDistinct": false,
+      "name": "player_stats_user_id_key",
+      "schema": "public",
+      "table": "player_stats",
       "entityType": "uniques"
     }
   ],

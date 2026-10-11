@@ -23,7 +23,7 @@ export type AuthHooks = {
    * A guest signed in with a real account. Move their data to `userId`
    * now: the guest user is deleted right after this resolves.
    */
-  onGuestSignedIn: (guestId: string, userId: string) => Promise<void>;
+  onGuestSignedIn: (guest: { id: string; image?: string | null }, userId: string) => Promise<void>;
 };
 
 /**
@@ -70,7 +70,7 @@ export function createAuth(env: AuthConfig, database: Database, hooks: AuthHooks
       anonymous({
         generateName: guestName,
         onLinkAccount: ({ anonymousUser, newUser }) =>
-          hooks.onGuestSignedIn(anonymousUser.user.id, newUser.user.id),
+          hooks.onGuestSignedIn(anonymousUser.user, newUser.user.id),
       }),
     ],
   });

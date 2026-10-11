@@ -48,7 +48,8 @@ CREATE TABLE "verification" (
 );
 --> statement-breakpoint
 CREATE TABLE "game" (
-	"id" text PRIMARY KEY,
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "game_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"public_id" text NOT NULL UNIQUE,
 	"status" "game_status" DEFAULT 'waiting'::"game_status" NOT NULL,
 	"private" boolean DEFAULT false NOT NULL,
 	"created_by" text,
@@ -64,7 +65,8 @@ CREATE TABLE "game" (
 );
 --> statement-breakpoint
 CREATE TABLE "player_stats" (
-	"user_id" text PRIMARY KEY,
+	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "player_stats_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"user_id" text NOT NULL UNIQUE,
 	"rating" integer DEFAULT 1000 NOT NULL,
 	"wins" integer DEFAULT 0 NOT NULL,
 	"losses" integer DEFAULT 0 NOT NULL,

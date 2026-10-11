@@ -1,33 +1,37 @@
 import { Avatar, Style } from "@dicebear/core";
 import thumbs from "@dicebear/styles/thumbs.json" with { type: "json" };
+import { publicId } from "@thicctactoe/db/public-id";
 import type { S3Client } from "bun";
 
 const style = new Style(thumbs);
+const FILE = /^[2-9a-km-np-z]{10}\.svg$/;
 
 /**
- * Generated guest avatars, stored in the bucket and served from
- * `{publicUrl}/avatars/{userId}.svg` (Railway buckets are private).
+ * Generated guest avatars, stored in the bucket under a random public id and
+ * served from `{publicUrl}/avatars/{id}.svg` (Railway buckets are private).
  */
 export function createAvatars({ bucket, publicUrl }: { bucket: S3Client; publicUrl: string }) {
-  const key = (userId: string) => `avatars/${userId}.svg`;
+  const base = `${publicUrl.replace(/\/$/, "")}/avatars/`;
 
   return {
-    /** Generates and stores an avatar for the user; returns its URL. */
-    async create(userId: string) {
-      const svg = new Avatar(style, { seed: userId }).toString();
-      await bucket.write(key(userId), svg, { type: "image/svg+xml" });
-      return `${publicUrl.replace(/\/$/, "")}/${key(userId)}`;
+    /** Generates and stores a new avatar; returns its URL. */
+    async create() {
+      const file = `${publicId()}.svg`;
+      const svg = new Avatar(style, { seed: file }).toString();
+      await bucket.write(`avatars/${file}`, svg, { type: "image/svg+xml" });
+      return base + file;
     },
 
-    async remove(userId: string) {
-      await bucket.delete(key(userId));
+    /** Deletes an avatar created here, given its URL; other images are ignored. */
+    async remove(url: string | null | undefined) {
+      const file = url?.startsWith(base) ? url.slice(base.length) : null;
+      if (file && FILE.test(file)) await bucket.delete(`avatars/${file}`);
     },
 
     /** Response for GET /avatars/:file, or null if there is no such avatar. */
     async serve(file: string) {
-      const userId = file.match(/^([\w-]+)\.svg$/)?.[1];
-      if (!userId) return null;
-      const object = bucket.file(key(userId));
+      if (!FILE.test(file)) return null;
+      const object = bucket.file(`avatars/${file}`);
       if (!(await object.exists())) return null;
       return new Response(object.stream(), {
         headers: {

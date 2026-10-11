@@ -1,6 +1,7 @@
 import type { Move, Player } from "@thicctactoe/game";
 import { defineRelationsPart, sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -11,6 +12,7 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 
+import { publicId } from "../public-id";
 import { user } from "./auth";
 
 export const gameStatus = pgEnum("game_status", ["waiting", "active", "finished", "cancelled"]);
@@ -19,7 +21,9 @@ export const gameEndReason = pgEnum("game_end_reason", ["line", "draw", "resign"
 export const game = pgTable(
   "game",
   {
-    id: text("id").primaryKey(),
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    /** The id in game links. */
+    publicId: text("public_id").notNull().unique().$defaultFn(publicId),
     status: gameStatus("status").default("waiting").notNull(),
     /** Private games are only joinable by link; public ones by matchmaking. */
     private: boolean("private").default(false).notNull(),
@@ -49,8 +53,10 @@ export const game = pgTable(
 export const playerStats = pgTable(
   "player_stats",
   {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
     userId: text("user_id")
-      .primaryKey()
+      .notNull()
+      .unique()
       .references(() => user.id, { onDelete: "cascade" }),
     rating: integer("rating").default(1000).notNull(),
     wins: integer("wins").default(0).notNull(),

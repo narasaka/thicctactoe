@@ -1,4 +1,4 @@
-import { type Move, type Player, play, replay } from "@thicctactoe/game";
+import { type Move, play, replay } from "@thicctactoe/game";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -16,8 +16,7 @@ export function useMatch(gameId: string, userId: string | undefined) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Move | null>(null);
 
-  const seat: Player | null =
-    view?.players.X?.id === userId ? "X" : view?.players.O?.id === userId ? "O" : null;
+  const seat = view?.seat ?? null;
 
   useEffect(() => {
     if (!userId) return;
