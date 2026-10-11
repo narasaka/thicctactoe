@@ -1,8 +1,7 @@
 import type { Context as ApiContext } from "@thicctactoe/api/context";
 import type { Context as HonoContext } from "hono";
 
-import { db } from "./services";
-import { auth } from "./services";
+import { arena, auth } from "./services";
 
 export type CreateContextOptions = {
   context: HonoContext;
@@ -13,7 +12,7 @@ export async function createContext({ context }: CreateContextOptions): Promise<
     headers: context.req.raw.headers,
   });
   return {
-    db,
+    arena,
     session,
   };
 }

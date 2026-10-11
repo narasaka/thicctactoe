@@ -20,6 +20,8 @@
     "apps/server": {
       "name": "server",
       "dependencies": {
+        "@dicebear/core": "^10.7.0",
+        "@dicebear/styles": "^10.6.0",
         "@orpc/openapi": "catalog:",
         "@orpc/server": "catalog:",
         "@orpc/zod": "catalog:",
@@ -27,6 +29,7 @@
         "@thicctactoe/auth": "workspace:*",
         "@thicctactoe/db": "workspace:*",
         "better-auth": "catalog:",
+        "drizzle-orm": "catalog:",
         "hono": "^4.13.7",
         "varlock": "catalog:",
         "zod": "catalog:",
@@ -91,10 +94,14 @@
         "@orpc/zod": "catalog:",
         "@thicctactoe/auth": "workspace:*",
         "@thicctactoe/db": "workspace:*",
+        "@thicctactoe/game": "workspace:*",
+        "drizzle-orm": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {
         "@thicctactoe/config": "workspace:*",
+        "@types/pg": "^8.23.1",
+        "pg": "^8.23.0",
         "typescript": "catalog:",
       },
     },
@@ -120,6 +127,7 @@
     "packages/db": {
       "name": "@thicctactoe/db",
       "dependencies": {
+        "@thicctactoe/game": "workspace:*",
         "drizzle-orm": "catalog:",
         "pg": "^8.23.0",
         "zod": "catalog:",
@@ -291,6 +299,10 @@
     "@csstools/css-syntax-patches-for-csstree": ["@csstools/css-syntax-patches-for-csstree@1.1.15", "", { "peerDependencies": { "css-tree": "^3.2.1" }, "optionalPeers": ["css-tree"] }, "sha512-J0u7HkVl2nzSlhsiTOp4AmwcUQ3D+mGEEKfBy/7To5/y7F2OHwyLrXfrhR0SMgr4p5Lo+eaMVSeai24zUcBIxA=="],
 
     "@csstools/css-tokenizer": ["@csstools/css-tokenizer@4.0.2", "", {}, "sha512-OoKoR0f76dCY666JlcbhmVTs2drYj1GUXZTYTcbUgJjh9Nv41aFfZ21bPQTERm5+L5cBDo466NltB2lplS5GBw=="],
+
+    "@dicebear/core": ["@dicebear/core@10.7.0", "", {}, "sha512-JUOzKOd8RUByJJo8ZL+C7YE/pvEsWewfpbWUmR8OIQZWv/PvUQHnohdevySC3icyyxe6EIU/8B/rQgA42us1QA=="],
+
+    "@dicebear/styles": ["@dicebear/styles@10.6.0", "", {}, "sha512-KhxbEVI+z8TaenX58+ZhIRFBt7adggu/F+8g6ZYLu43H2/lgLuWA3Kg8vHBrCVWdfTTTt1p2wUhQomIkkypTuQ=="],
 
     "@dnd-kit/accessibility": ["@dnd-kit/accessibility@3.1.1", "", { "dependencies": { "tslib": "^2.0.0" }, "peerDependencies": { "react": ">=16.8.0" } }, "sha512-2P+YgaXF+gRsIihwwY1gCsQSYnu9Zyj2py8kY5fFvUM1qm2WA2u639R6YNVfU4GWr+ZM5mqEsfHZZLoRONbemw=="],
 

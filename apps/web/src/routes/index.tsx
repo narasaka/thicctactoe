@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 
-import Button, { buttonClass } from "@/components/button";
+import { buttonClass } from "@/components/button";
 import Layout from "@/components/layout";
 
 export const Route = createFileRoute("/")({
@@ -19,13 +19,20 @@ function HomePage() {
         <Link to="/game" className={buttonClass({ className: "text-center" })}>
           Play local
         </Link>
-        <Button intent="secondary" disabled>
-          Play online (coming soon!)
-        </Button>
+        <Link to="/play" className={buttonClass({ intent: "secondary", className: "text-center" })}>
+          Play online
+        </Link>
       </div>
       <div className="mt-2 text-center">
         <Link to="/tutorial" className="text-sm text-neutral-500 underline hover:text-neutral-700">
           How to play
+        </Link>
+        <span className="mx-2 text-neutral-300">·</span>
+        <Link
+          to="/leaderboard"
+          className="text-sm text-neutral-500 underline hover:text-neutral-700"
+        >
+          Leaderboard
         </Link>
       </div>
     </Layout>

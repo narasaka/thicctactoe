@@ -1,0 +1,43 @@
+# Local backing services for apps/server: `docker compose up -d`
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: thicctactoe
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      retries: 15
+
+  # S3-compatible stand-in for the Railway bucket.
+  s3:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+    ports:
+      - "9000:9000"
+    volumes:
+      - s3:/data
+
+  s3-setup:
+    image: amazon/aws-cli:latest
+    depends_on:
+      - s3
+    environment:
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: >
+      sh -c "until aws --endpoint-url http://s3:9000 s3api list-buckets > /dev/null; do sleep 1; done;
+             aws --endpoint-url http://s3:9000 s3 mb s3://thicctactoe || true"
+
+volumes:
+  postgres:
+  s3:

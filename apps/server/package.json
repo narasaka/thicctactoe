@@ -12,6 +12,8 @@
     "auth:generate": "varlock run -- bun x auth@latest generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes"
   },
   "dependencies": {
+    "@dicebear/core": "^10.7.0",
+    "@dicebear/styles": "^10.6.0",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
@@ -19,6 +21,7 @@
     "@thicctactoe/auth": "workspace:*",
     "@thicctactoe/db": "workspace:*",
     "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
     "hono": "^4.13.7",
     "varlock": "catalog:",
     "zod": "catalog:"
