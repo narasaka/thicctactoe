@@ -1,0 +1,11 @@
+@import "@thicctactoe/ui/globals.css";
+
+@theme {
+  /* Wide enough for the board with a piece tray on each side. */
+  --breakpoint-wide: 70rem;
+}
+
+/* A scrollbar appearing or disappearing must never shift the page sideways. */
+html {
+  scrollbar-gutter: stable;
+}
