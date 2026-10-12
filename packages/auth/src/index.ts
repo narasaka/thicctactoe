@@ -2,9 +2,10 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import type { Database } from "@thicctactoe/db";
 import * as schema from "@thicctactoe/db/schema/auth";
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { anonymous } from "better-auth/plugins";
 
-import { guestName } from "./names";
+import { DISPLAY_NAME_MAX, displayName, guestName } from "./names";
 
 export type AuthConfig = {
   BETTER_AUTH_URL: string;
@@ -54,6 +55,12 @@ export function createAuth(env: AuthConfig, database: Database, hooks: AuthHooks
           github: { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET },
         }),
     },
+    user: {
+      additionalFields: {
+        /** Whether the player has picked a name since signing in for the first time. */
+        onboarded: { type: "boolean", defaultValue: false, input: false },
+      },
+    },
     account: {
       accountLinking: { enabled: true, trustedProviders: ["google", "github"] },
     },
@@ -62,6 +69,28 @@ export function createAuth(env: AuthConfig, database: Database, hooks: AuthHooks
         create: {
           after: async (user) => {
             if (user.isAnonymous) await hooks.onGuestCreated(user.id);
+          },
+        },
+        update: {
+          // Players may rename themselves through /update-user; nothing else
+          // there is theirs to change (avatars are generated or come from the
+          // provider).
+          before: async (data, context) => {
+            if (context?.path !== "/update-user") return;
+            if (data.image !== undefined) {
+              throw new APIError("BAD_REQUEST", { message: "Avatars can't be changed" });
+            }
+            if (data.name === undefined) return;
+            const name = displayName(data.name);
+            if (!name) {
+              throw new APIError("BAD_REQUEST", {
+                message: `Names must be 1 to ${DISPLAY_NAME_MAX} characters`,
+              });
+            }
+            // Picking a name is all onboarding asks of a real account.
+            const user = context.context.session?.user;
+            const onboarded = !!user && !user.isAnonymous;
+            return { data: { ...data, name, ...(onboarded && { onboarded }) } };
           },
         },
       },
