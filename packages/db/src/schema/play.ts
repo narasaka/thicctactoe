@@ -70,6 +70,29 @@ export const playerStats = pgTable(
   (table) => [index("player_stats_rating_idx").on(table.rating)],
 );
 
+/**
+ * One row per open watch stream of a seated player, on any server instance.
+ * The instance holding the stream refreshes `seenAt`; a row that stops being
+ * refreshed belongs to an instance that died.
+ */
+export const presence = pgTable(
+  "presence",
+  {
+    id: text("id").primaryKey(),
+    /** The game's public id, which is what every live update is keyed by. */
+    gameId: text("game_id")
+      .notNull()
+      .references(() => game.publicId, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    seenAt: timestamp("seen_at").defaultNow().notNull(),
+    /** When the stream closed. Kept for a while so abandonment can tell how long ago. */
+    leftAt: timestamp("left_at"),
+  },
+  (table) => [index("presence_gameId_idx").on(table.gameId)],
+);
+
 export const playRelations = defineRelationsPart({ user, game, playerStats }, (r) => ({
   game: {
     x: r.one.user({ from: r.game.playerX, to: r.user.id }),

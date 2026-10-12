@@ -15,13 +15,31 @@ export default defineRailway(() => {
     build: {
       builder: "RAILPACK",
       buildCommand: "bunx turbo run build --filter=server",
-      watchPatterns: ["/apps/server/**", "/packages/**", "/bun.lock", "/package.json"],
+      // Only the server and the packages it builds from; web and ui changes don't redeploy.
+      watchPatterns: [
+        "/apps/server/**",
+        "/packages/api/**",
+        "/packages/auth/**",
+        "/packages/config/**",
+        "/packages/db/**",
+        "/packages/game/**",
+        "/bun.lock",
+        "/package.json",
+        "/turbo.json",
+      ],
     },
     preDeploy: "cd packages/db && bun run db:migrate:production",
-    start: "cd apps/server && bun run start",
+    // `exec` so the shell Railway starts this in passes SIGTERM on to the server.
+    start: "cd apps/server && exec bun run start",
     healthcheck: "/",
-    // Live game updates and presence are kept in memory: exactly one replica.
+    // Live games are shared through Postgres, so instances can overlap or scale out.
     replicas: 1,
+    deploy: {
+      // Keep the old deployment up briefly after the new one takes traffic, then
+      // give it time after SIGTERM to hand its live games over.
+      overlapSeconds: 5,
+      drainingSeconds: 10,
+    },
     // api.thicctactoe.com is attached with `railway domain` (not supported in IaC yet).
     env: {
       PORT: "3000",

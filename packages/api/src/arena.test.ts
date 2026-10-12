@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb } from "@thicctactoe/db";
 import { playerStats, user } from "@thicctactoe/db/schema/index";
 import type { Move } from "@thicctactoe/game";
@@ -6,13 +6,20 @@ import { sql } from "drizzle-orm";
 import { Client } from "pg";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 
-import { type MatchView, createArena } from "./arena";
+import { type Arena, type ArenaOptions, type MatchView, createArena } from "./arena";
 
 // Needs Postgres, e.g. `docker compose up -d`. The schema is wiped on every run.
 const DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://postgres:password@localhost:5432/thicctactoe_test";
 const db = createDb({ DATABASE_URL });
-let arena = createArena({ db });
+/** Every arena a test starts, as if each were its own server instance. */
+const arenas: Arena[] = [];
+const start = (options: Omit<ArenaOptions, "db"> = {}) => {
+  const instance = createArena({ db, abandonGraceMs: 10, heartbeatMs: 60_000, ...options });
+  arenas.push(instance);
+  return instance;
+};
+let arena: Arena;
 
 beforeAll(async () => {
   await createDatabaseIfMissing(DATABASE_URL);
@@ -27,7 +34,11 @@ afterAll(() => db.$client.end());
 
 beforeEach(async () => {
   await db.execute(sql`truncate table "user", game cascade`);
-  arena = createArena({ db, abandonGraceMs: 10 });
+  arena = start();
+});
+
+afterEach(async () => {
+  await Promise.all(arenas.splice(0).map((instance) => instance.close()));
 });
 
 async function addUser(id: string, anonymous = false) {
@@ -191,6 +202,7 @@ describe("abandoned games", () => {
     const host = await addUser("host");
     const id = await arena.quickMatch(host);
     await Bun.sleep(50);
+    await arena.sweep();
     expect((await arena.view(id, null)).status).toBe("cancelled");
   });
 
@@ -200,6 +212,7 @@ describe("abandoned games", () => {
     const stream = arena.watch(id, host);
     await stream.next();
     await Bun.sleep(50);
+    await arena.sweep();
     expect((await arena.view(id, host)).status).toBe("waiting");
     await stream.return(undefined);
   });
@@ -231,7 +244,49 @@ describe("watch", () => {
     await stream.return(undefined);
 
     await Bun.sleep(50);
+    await arena.sweep();
     expect((await arena.view(id, null)).status).toBe("cancelled");
+  });
+});
+
+describe("multiple instances", () => {
+  test("watchers on one instance see changes made through another", async () => {
+    const { id, X, O } = await startGame();
+    const other = start();
+    const stream = other.watch(id, O);
+    expect((await stream.next()).value?.players.O?.online).toBe(true);
+
+    const next = stream.next();
+    await arena.move(id, X, { player: "X", size: "small", cell: 4 });
+    expect((await next).value?.moves).toHaveLength(1);
+    await stream.return(undefined);
+  });
+
+  test("players on an instance that died go offline, and their waiting game is cancelled", async () => {
+    const host = await addUser("host");
+    const dead = start({ staleMs: 20 });
+    const id = await dead.invite(host);
+    const stream = dead.watch(id, host);
+    await stream.next();
+    // It never refreshes its presence again, nor closes the stream.
+    await Bun.sleep(50);
+
+    const survivor = start({ staleMs: 20 });
+    await survivor.sweep();
+    const game = await survivor.view(id, null);
+    expect(game.players.X?.online ?? game.players.O?.online).toBe(false);
+    expect(game.status).toBe("cancelled");
+  });
+
+  test("closing an instance ends its streams and marks its players gone", async () => {
+    const { id, X } = await startGame();
+    const closing = start();
+    const stream = closing.watch(id, X);
+    await stream.next();
+
+    await closing.close();
+    expect((await stream.next()).done).toBe(true);
+    expect((await arena.view(id, null)).players.X?.online).toBe(false);
   });
 });
 
