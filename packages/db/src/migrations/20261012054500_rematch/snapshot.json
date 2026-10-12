@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "56c20fe3-4cf6-4088-a726-d455125862be",
-  "prevIds": ["1aa76058-8b98-4e9c-8375-acf5fb389d5f"],
+  "id": "660065e4-0f5f-474a-ad86-b5fe6f8b568a",
+  "prevIds": ["b8f94fcf-608a-4445-badc-c8f0f9348509"],
   "ddl": [
     {
       "values": ["line", "draw", "resign"],
@@ -694,6 +694,19 @@
       "generated": null,
       "identity": null,
       "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "game"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "started_at",
       "entityType": "columns",
       "schema": "public",
       "table": "game"

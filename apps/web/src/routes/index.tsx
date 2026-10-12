@@ -34,6 +34,10 @@ function HomePage() {
         >
           Leaderboard
         </Link>
+        <span className="mx-2 text-neutral-300">·</span>
+        <Link to="/history" className="text-sm text-neutral-500 underline hover:text-neutral-700">
+          Your games
+        </Link>
       </div>
     </Layout>
   );

@@ -12,8 +12,12 @@ const cell = cva(
         true: "bg-emerald-100",
         false: "bg-white",
       },
-      highlighted: {
-        true: "ring-4 ring-amber-300",
+      mark: {
+        none: "",
+        /** Part of the winning line. */
+        line: "ring-4 ring-amber-300",
+        /** Where the last move was played. */
+        last: "ring-4 ring-neutral-300",
       },
     },
   },
@@ -22,15 +26,15 @@ const cell = cva(
 export default function Cell({
   index,
   piece,
-  highlighted,
+  mark,
 }: {
   index: number;
   piece: Piece | null;
-  highlighted: boolean;
+  mark: "none" | "line" | "last";
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: index });
   return (
-    <div ref={setNodeRef} className={cell({ isOver, highlighted })}>
+    <div ref={setNodeRef} className={cell({ isOver, mark })}>
       {piece && <PieceView player={piece.player} size={piece.size} />}
     </div>
   );

@@ -23,6 +23,11 @@ export default function UserBadge() {
 
   const user = session?.user;
   const guest = !user || user.isAnonymous;
+  const history = (
+    <DropdownMenuItem onClick={() => void navigate({ to: "/history" })}>
+      Your games
+    </DropdownMenuItem>
+  );
 
   return (
     <>
@@ -45,11 +50,18 @@ export default function UserBadge() {
                   Sign in with {name}
                 </DropdownMenuItem>
               ))}
+              {user && (
+                <>
+                  <DropdownMenuSeparator />
+                  {history}
+                </>
+              )}
             </DropdownMenuGroup>
           ) : (
             <DropdownMenuGroup>
               <DropdownMenuLabel className="text-neutral-500">{user.email}</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {history}
               <DropdownMenuItem onClick={() => setRenaming(true)}>Change name</DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"

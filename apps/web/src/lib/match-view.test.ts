@@ -14,6 +14,8 @@ const view = (patch: Partial<MatchView>): MatchView => ({
   ratingDelta: null,
   rematchOffer: null,
   rematchId: null,
+  startedAt: null,
+  finishedAt: null,
   ...patch,
 });
 const move = { player: "X", size: "small", cell: 0 } as const;

@@ -39,6 +39,16 @@ export const appRouter = {
       .handler(({ context, input }) =>
         context.arena.view(input.id, context.session?.user.id ?? null),
       ),
+    history: protectedProcedure
+      .input(
+        z
+          .object({
+            after: z.string().min(1).optional(),
+            limit: z.number().int().min(1).max(50).default(20),
+          })
+          .optional(),
+      )
+      .handler(({ context, input }) => context.arena.history(context.session.user.id, input)),
     watch: publicProcedure
       .input(gameInput)
       .handler(({ context, input, signal }) =>

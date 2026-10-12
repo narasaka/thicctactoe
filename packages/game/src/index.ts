@@ -112,6 +112,20 @@ export function replay(moves: readonly Move[]): Game {
   return game;
 }
 
+/**
+ * Every position of a game, from the empty board (index 0) to the position
+ * after the last move (index `moves.length`). Throws if any move is illegal.
+ */
+export function positions(moves: readonly Move[]): Game[] {
+  const all = [newGame()];
+  for (const [index, move] of moves.entries()) {
+    const result = play(all[index]!, move);
+    if (!result.ok) throw new Error(`Illegal move #${index}: ${result.error}`);
+    all.push(result.game);
+  }
+  return all;
+}
+
 function fits(top: Piece | null, size: Size) {
   return top === null || RANK[size] > RANK[top.size];
 }

@@ -1,10 +1,17 @@
 import { EventPublisher, ORPCError } from "@orpc/server";
 import type { Database } from "@thicctactoe/db";
-import { game as gameTable, playerStats, user } from "@thicctactoe/db/schema/index";
+import {
+  type LoggedMove,
+  game as gameTable,
+  playerStats,
+  user,
+} from "@thicctactoe/db/schema/index";
 import { type Move, type Player, other, play, replay } from "@thicctactoe/game";
 import { and, asc, desc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import { ratingChange } from "./rating";
+
+export type { LoggedMove };
 
 /**
  * Online play: matchmaking, invites, authoritative moves, ratings and live
@@ -33,7 +40,7 @@ export type MatchView = {
   /** The viewer's seat, or null for spectators. */
   seat: Player | null;
   players: Record<Player, PlayerView | null>;
-  moves: Move[];
+  moves: LoggedMove[];
   winner: Player | null;
   endReason: "line" | "draw" | "resign" | null;
   ratingDelta: Record<Player, number> | null;
@@ -41,6 +48,29 @@ export type MatchView = {
   rematchOffer: Player | null;
   /** Public id of the rematch, once both players agreed to it. */
   rematchId: string | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+};
+
+/** A finished game, from the point of view of one of its players. */
+export type HistoryEntry = {
+  /** Public id, as used in game links. */
+  id: string;
+  private: boolean;
+  seat: Player;
+  /** Null if the opponent's account has since been deleted. */
+  opponent: Pick<PlayerView, "name" | "image" | "anonymous"> | null;
+  result: "win" | "loss" | "draw";
+  endReason: "line" | "draw" | "resign";
+  ratingDelta: number | null;
+  moveCount: number;
+  finishedAt: Date;
+};
+
+export type HistoryPage = {
+  games: HistoryEntry[];
+  /** Pass as `after` to get the next page; null on the last page. */
+  next: string | null;
 };
 
 export type LeaderboardEntry = {
@@ -121,6 +151,8 @@ export function createArena({
         ratingDelta: row.ratingDelta,
         rematchOffer: row.rematchOffer,
         rematchId: row.rematchId,
+        startedAt: row.startedAt,
+        finishedAt: row.finishedAt,
       },
       seats: { X: row.playerX, O: row.playerO },
     };
@@ -181,6 +213,7 @@ export function createArena({
       .update(gameTable)
       .set({
         status: "active",
+        startedAt: new Date(),
         playerX: row.playerX ?? userId,
         playerO: row.playerO ?? userId,
       })
@@ -193,7 +226,7 @@ export function createArena({
     row: GameRow,
     winner: Player | null,
     endReason: "line" | "draw" | "resign",
-    moves: Move[] = row.moves,
+    moves: LoggedMove[] = row.moves,
   ) {
     const x = row.playerX!;
     const o = row.playerO!;
@@ -345,7 +378,7 @@ export function createArena({
         const result = play(replay(row.moves), move);
         if (!result.ok) throw new ORPCError("CONFLICT", { message: result.error });
 
-        const moves = [...result.game.moves];
+        const moves = [...row.moves, { ...move, at: new Date().toISOString() }];
         const { outcome } = result.game;
         if (outcome.status === "won") return finish(tx, row, outcome.winner, "line", moves);
         if (outcome.status === "draw") return finish(tx, row, null, "draw", moves);
@@ -394,6 +427,7 @@ export function createArena({
           .insert(gameTable)
           .values({
             status: "active",
+            startedAt: new Date(),
             private: row.private,
             createdBy: userId,
             playerX: row.playerO,
@@ -448,6 +482,78 @@ export function createArena({
           await broadcast(gameId).catch(() => {});
         }
       }
+    },
+
+    /** The player's finished games, newest first. */
+    async history(
+      userId: string,
+      { after, limit = 20 }: { after?: string; limit?: number } = {},
+    ): Promise<HistoryPage> {
+      // Ordered by (finishedAt, id) so games finished in the same instant still page cleanly.
+      const anchor = after
+        ? db
+            .select({ finishedAt: gameTable.finishedAt, id: gameTable.id })
+            .from(gameTable)
+            .where(eq(gameTable.publicId, after))
+        : undefined;
+      const rows = await db
+        .select({
+          publicId: gameTable.publicId,
+          private: gameTable.private,
+          playerX: gameTable.playerX,
+          playerO: gameTable.playerO,
+          winner: gameTable.winner,
+          endReason: gameTable.endReason,
+          ratingDelta: gameTable.ratingDelta,
+          moveCount: sql<number>`jsonb_array_length(${gameTable.moves})`,
+          finishedAt: gameTable.finishedAt,
+        })
+        .from(gameTable)
+        .where(
+          and(
+            eq(gameTable.status, "finished"),
+            or(eq(gameTable.playerX, userId), eq(gameTable.playerO, userId)),
+            anchor && sql`(${gameTable.finishedAt}, ${gameTable.id}) < (${anchor})`,
+          ),
+        )
+        .orderBy(desc(gameTable.finishedAt), desc(gameTable.id))
+        .limit(limit + 1);
+      const page = rows.slice(0, limit);
+
+      const opponentIds = page
+        .map((row) => (row.playerX === userId ? row.playerO : row.playerX))
+        .filter((id) => id !== null);
+      const opponents = opponentIds.length
+        ? await db
+            .select({
+              id: user.id,
+              name: user.name,
+              image: user.image,
+              anonymous: user.isAnonymous,
+            })
+            .from(user)
+            .where(inArray(user.id, opponentIds))
+        : [];
+
+      const games = page.map((row): HistoryEntry => {
+        const seat: Player = row.playerX === userId ? "X" : "O";
+        const opponentId = seat === "X" ? row.playerO : row.playerX;
+        const opponent = opponents.find((o) => o.id === opponentId);
+        return {
+          id: row.publicId,
+          private: row.private,
+          seat,
+          opponent: opponent
+            ? { name: opponent.name, image: opponent.image, anonymous: opponent.anonymous ?? false }
+            : null,
+          result: row.winner === null ? "draw" : row.winner === seat ? "win" : "loss",
+          endReason: row.endReason!,
+          ratingDelta: row.ratingDelta?.[seat] ?? null,
+          moveCount: row.moveCount,
+          finishedAt: row.finishedAt!,
+        };
+      });
+      return { games, next: rows.length > limit ? page.at(-1)!.publicId : null };
     },
 
     /** Signed-in (non-anonymous) players who have finished at least one game. */

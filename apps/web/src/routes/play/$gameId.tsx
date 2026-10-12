@@ -202,13 +202,21 @@ function Status({
             </span>
           )}
         </div>
-        <div className="flex h-10 items-center gap-4">
+        <div className="flex h-10 items-center gap-3 sm:gap-4">
           <RematchAction view={view} rematch={rematch} />
           {seat && (
             <button className={TEXT_LINK} onClick={playAgain}>
               New game
             </button>
           )}
+          <Link
+            to="/history/$gameId"
+            params={{ gameId: view.id }}
+            search={{ move: 0 }}
+            className={TEXT_LINK}
+          >
+            Replay
+          </Link>
           <Link to="/leaderboard" className={TEXT_LINK}>
             Leaderboard
           </Link>
@@ -269,8 +277,14 @@ function RematchAction({ view, rematch }: { view: MatchView; rematch: () => void
     );
   }
   return (
-    <Button onClick={rematch} className="whitespace-nowrap">
-      {view.rematchOffer ? "Accept rematch" : "Rematch"}
+    <Button onClick={rematch} className="whitespace-nowrap max-sm:px-3 max-sm:text-sm">
+      {view.rematchOffer ? (
+        <>
+          Accept<span className="max-sm:hidden"> rematch</span>
+        </>
+      ) : (
+        "Rematch"
+      )}
     </Button>
   );
 }
