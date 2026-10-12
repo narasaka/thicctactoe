@@ -20,7 +20,7 @@ type PieceSize = "small" | "medium" | "large";
 type Player = "X" | "O";
 
 const pieceVariants = cva(
-  "flex items-center justify-center touch-none select-none rounded-full font-semibold shadow-lg",
+  "flex shrink-0 items-center justify-center touch-none select-none rounded-full font-semibold shadow-lg",
   {
     variants: {
       size: {
@@ -223,7 +223,7 @@ function Step2Content({ onComplete, completed }: InteractiveStepProps) {
         </div>
 
         {/* Fixed height: swapping the piece for the success message must not move the board. */}
-        <div className="flex h-28 flex-col items-center justify-center gap-2">
+        <div className="flex h-32 flex-col items-center justify-center gap-2">
           {!showPlaced ? (
             <>
               <TutorialPiece id="drag-piece-step2" size="medium" player="X" />
@@ -292,7 +292,7 @@ function Step3Content({ onComplete, completed }: InteractiveStepProps) {
         </div>
 
         {/* Fixed height: swapping the piece for the success message must not move the board. */}
-        <div className="flex h-28 flex-col items-center justify-center gap-2">
+        <div className="flex h-32 flex-col items-center justify-center gap-2">
           {!showGobbled ? (
             <>
               <TutorialPiece id="drag-piece-step3" size="large" player="X" />
@@ -361,7 +361,7 @@ function Step4Content({ onComplete, completed }: InteractiveStepProps) {
         </div>
 
         {/* Fixed height: swapping the piece for the success message must not move the board. */}
-        <div className="flex h-28 flex-col items-center justify-center gap-2">
+        <div className="flex h-32 flex-col items-center justify-center gap-2">
           {!showWon ? (
             <>
               <TutorialPiece id="drag-piece-step4" size="medium" player="X" />
@@ -486,7 +486,11 @@ function TutorialPage() {
               key={index}
               inert={index !== step}
               className={
-                index === step ? "col-start-1 row-start-1" : "invisible col-start-1 row-start-1"
+                index === step
+                  ? "col-start-1 row-start-1"
+                  : // Opacity, not just visibility: children inherit visibility and their
+                    // transitions would keep the old step on screen while they run.
+                    "invisible col-start-1 row-start-1 opacity-0"
               }
             >
               {content}
@@ -516,7 +520,7 @@ function TutorialPage() {
               inert={!showBack}
               className={buttonVariants({
                 intent: "secondary",
-                className: !showBack && "invisible",
+                className: !showBack && "invisible transition-none",
               })}
             >
               <ChevronLeft className="mr-1 inline h-4 w-4" />
@@ -529,7 +533,7 @@ function TutorialPage() {
               className={buttonVariants({
                 intent: "primary",
                 disabled: !canAdvance || undefined,
-                className: lastStep && "invisible",
+                className: lastStep && "invisible transition-none",
               })}
             >
               Next
