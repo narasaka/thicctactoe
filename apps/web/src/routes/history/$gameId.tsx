@@ -18,7 +18,7 @@ import GameBoard from "@/components/board/game-board";
 import { PieceBadge } from "@/components/board/piece";
 import { buttonClass } from "@/components/button";
 import Layout from "@/components/layout";
-import PlayerCard from "@/components/player-card";
+import PlayerCard, { piecesUsed } from "@/components/player-card";
 import type { MatchView } from "@/lib/match-view";
 import { CELL_NAMES, type Replay, buildReplay, formatClock } from "@/lib/replay";
 import { orpc } from "@/utils/orpc";
@@ -130,48 +130,49 @@ function ReplayPage() {
       player={view.players[player]}
       active={!ended && game.turn === player}
       you={view.seat === player}
+      used={piecesUsed(game, player)}
       delta={view.ratingDelta?.[player]}
     />
   );
 
   return (
     <Layout>
-      <div className="mx-auto mb-6 grid w-full max-w-2xl grid-cols-[1fr_auto_1fr] items-center gap-3">
-        {card("X")}
-        <span className="text-sm font-semibold text-neutral-400">vs</span>
-        {card("O")}
+      {/* On phones the board takes the height it is given; the move list scrolls in below. */}
+      <div className="max-md:h-[min(100svh-6rem,40rem)]">
+        <GameBoard
+          key={view.id}
+          game={game}
+          seats={[]}
+          locked
+          markLastMove
+          onMove={() => {}}
+          players={{ X: card("X"), O: card("O") }}
+          perspective={view.seat ?? undefined}
+          status={
+            <>
+              <div className="flex h-10 items-baseline gap-2">
+                {ended ? (
+                  <Result view={view} name={name} />
+                ) : (
+                  <span className="text-gray-600">
+                    {step === 0 ? "Start" : `Move ${step} of ${last}`}
+                  </span>
+                )}
+                {view.status === "active" && step === last && (
+                  <Link
+                    to="/play/$gameId"
+                    params={{ gameId: view.id }}
+                    className="text-sm text-neutral-500 underline hover:text-neutral-700"
+                  >
+                    Watch live
+                  </Link>
+                )}
+              </div>
+              <Controls step={step} last={last} playing={playing} seek={seek} toggle={toggle} />
+            </>
+          }
+        />
       </div>
-      <GameBoard
-        key={view.id}
-        game={game}
-        seats={[]}
-        locked
-        markLastMove
-        onMove={() => {}}
-        status={
-          <>
-            <div className="flex h-10 items-baseline gap-2">
-              {ended ? (
-                <Result view={view} name={name} />
-              ) : (
-                <span className="text-gray-600">
-                  {step === 0 ? "Start" : `Move ${step} of ${last}`}
-                </span>
-              )}
-              {view.status === "active" && step === last && (
-                <Link
-                  to="/play/$gameId"
-                  params={{ gameId: view.id }}
-                  className="text-sm text-neutral-500 underline hover:text-neutral-700"
-                >
-                  Watch live
-                </Link>
-              )}
-            </div>
-            <Controls step={step} last={last} playing={playing} seek={seek} toggle={toggle} />
-          </>
-        }
-      />
       <MoveList
         view={view}
         replay={replay}

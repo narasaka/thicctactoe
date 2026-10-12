@@ -13,6 +13,7 @@ import { useState } from "react";
 import { PROVIDERS, authClient, signInWith } from "@/lib/auth-client";
 
 import Avatar from "./avatar";
+import ProviderIcon from "./provider-icon";
 import RenameDialog from "./rename-dialog";
 
 export default function UserBadge() {
@@ -47,6 +48,7 @@ export default function UserBadge() {
               <DropdownMenuSeparator />
               {PROVIDERS.map(({ id, name }) => (
                 <DropdownMenuItem key={id} onClick={() => signInWith(id)}>
+                  <ProviderIcon provider={id} />
                   Sign in with {name}
                 </DropdownMenuItem>
               ))}

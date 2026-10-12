@@ -23,7 +23,7 @@ function LocalGamePage() {
   };
 
   return (
-    <Layout>
+    <Layout fit>
       <GameBoard
         key={round}
         game={game}
