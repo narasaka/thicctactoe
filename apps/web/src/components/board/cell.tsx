@@ -4,8 +4,9 @@ import { cva } from "class-variance-authority";
 
 import { PieceView } from "./piece";
 
+// Phones size cells to the board, which shrinks to fit the screen.
 const cell = cva(
-  "grid size-24 place-items-center rounded shadow-lg transition-all duration-500 sm:size-30",
+  "@container grid size-full place-items-center rounded shadow-lg transition-all duration-500 md:size-30",
   {
     variants: {
       isOver: {
@@ -35,7 +36,7 @@ export default function Cell({
   const { isOver, setNodeRef } = useDroppable({ id: index });
   return (
     <div ref={setNodeRef} className={cell({ isOver, mark })}>
-      {piece && <PieceView player={piece.player} size={piece.size} />}
+      {piece && <PieceView player={piece.player} size={piece.size} fit="cell" />}
     </div>
   );
 }
