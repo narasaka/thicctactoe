@@ -8,6 +8,7 @@ import GameBoard from "@/components/board/game-board";
 import Button, { buttonClass } from "@/components/button";
 import Layout from "@/components/layout";
 import PlayerCard from "@/components/player-card";
+import SignInNudge from "@/components/sign-in-nudge";
 import { useMatch } from "@/lib/match";
 import type { MatchView } from "@/lib/match-view";
 import { useGuestSession } from "@/lib/session";
@@ -20,6 +21,9 @@ export const Route = createFileRoute("/play/$gameId")({
 
 const COLOR_NAMES = { X: "Green", O: "Purple" } as const;
 
+/** Long enough to take in the final board before the nudge covers it. */
+const NUDGE_DELAY_MS = 1500;
+
 function MatchPage() {
   const { gameId } = Route.useParams();
   const session = useGuestSession();
@@ -31,6 +35,8 @@ function MatchPage() {
   useEffect(() => {
     if (joinable && join.isIdle) join.mutate();
   }, [joinable, join]);
+
+  const nudge = useSignInNudge(view, session?.user.isAnonymous ?? false);
 
   if (error) {
     return (
@@ -87,8 +93,36 @@ function MatchPage() {
         onMove={(move) => match.move.mutate(move)}
         status={<Status view={view} turn={game.turn} resign={() => match.resign.mutate()} />}
       />
+      {seat && view.players[seat] && (
+        <SignInNudge
+          open={nudge.open}
+          onOpenChange={nudge.setOpen}
+          player={view.players[seat]}
+          result={view.winner === null ? "tie" : view.winner === seat ? "win" : "loss"}
+          delta={view.ratingDelta?.[seat]}
+        />
+      )}
     </Layout>
   );
+}
+
+/**
+ * Opens once a guest finishes a game they watched being played, to get them
+ * onto the leaderboard. Revisiting an old game does not nag.
+ */
+function useSignInNudge(view: MatchView | null, guest: boolean) {
+  const [open, setOpen] = useState(false);
+  const [watched, setWatched] = useState<string | null>(null);
+  if (view?.status === "active" && watched !== view.id) setWatched(view.id);
+  const due = guest && view?.status === "finished" && view.seat !== null && watched === view.id;
+
+  useEffect(() => {
+    if (!due) return;
+    const timer = setTimeout(() => setOpen(true), NUDGE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [due]);
+
+  return { open: open && guest, setOpen };
 }
 
 /**
