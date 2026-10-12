@@ -24,8 +24,16 @@ const COLOR_NAMES = { X: "Green", O: "Purple" } as const;
 /** Long enough to take in the final board before the nudge covers it. */
 const NUDGE_DELAY_MS = 1500;
 
+/** Three end-of-game buttons have to share one row on a phone. */
+const ROW_BUTTON = "whitespace-nowrap max-sm:px-3 max-sm:text-sm";
+
 function MatchPage() {
   const { gameId } = Route.useParams();
+  // A rematch is a new game: start its page from scratch.
+  return <Match key={gameId} gameId={gameId} />;
+}
+
+function Match({ gameId }: { gameId: string }) {
   const session = useGuestSession();
   const match = useMatch(gameId, session?.user.id);
   const { view, game, seat, error, join } = match;
@@ -37,6 +45,7 @@ function MatchPage() {
   }, [joinable, join]);
 
   const nudge = useSignInNudge(view, session?.user.isAnonymous ?? false);
+  useFollowRematch(view);
 
   if (error) {
     return (
@@ -91,7 +100,14 @@ function MatchPage() {
         seats={seat ? [seat] : []}
         locked={!playing}
         onMove={(move) => match.move.mutate(move)}
-        status={<Status view={view} turn={game.turn} resign={() => match.resign.mutate()} />}
+        status={
+          <Status
+            view={view}
+            turn={game.turn}
+            resign={() => match.resign.mutate()}
+            rematch={() => match.rematch.mutate()}
+          />
+        }
       />
       {seat && view.players[seat] && (
         <SignInNudge
@@ -126,10 +142,35 @@ function useSignInNudge(view: MatchView | null, guest: boolean) {
 }
 
 /**
+ * Moves everyone watching on to the rematch as soon as it is agreed. Opening
+ * an old game whose rematch was played long ago stays put.
+ */
+function useFollowRematch(view: MatchView | null) {
+  const navigate = useNavigate();
+  const [watched, setWatched] = useState(false);
+  if (view?.status === "finished" && view.rematchId === null && !watched) setWatched(true);
+  const next = watched ? view?.rematchId : null;
+
+  useEffect(() => {
+    if (next) void navigate({ to: "/play/$gameId", params: { gameId: next } });
+  }, [next, navigate]);
+}
+
+/**
  * Two fixed rows inside the board's fixed-height status area, so switching
  * between turn, resign confirmation and result never moves anything.
  */
-function Status({ view, turn, resign }: { view: MatchView; turn: Player; resign: () => void }) {
+function Status({
+  view,
+  turn,
+  resign,
+  rematch,
+}: {
+  view: MatchView;
+  turn: Player;
+  resign: () => void;
+  rematch: () => void;
+}) {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
   const { seat } = view;
@@ -148,23 +189,51 @@ function Status({ view, turn, resign }: { view: MatchView; turn: Player; resign:
       void (view.private ? client.arena.invite() : client.arena.quickMatch()).then(({ id }) =>
         navigate({ to: "/play/$gameId", params: { gameId: id } }),
       );
+    const offeredBy = view.rematchOffer;
     return (
       <>
         <div className="flex h-10 items-baseline gap-2">
           <span className="text-3xl font-extrabold tracking-tight whitespace-nowrap sm:text-4xl">
             {headline}
           </span>
-          {view.endReason === "resign" && view.winner && (
+          {seat && offeredBy === other(seat) ? (
             <span className="truncate text-sm text-gray-500">
-              {name(other(view.winner))} resigned
+              {name(offeredBy)} wants a rematch
             </span>
+          ) : (
+            view.endReason === "resign" &&
+            view.winner && (
+              <span className="truncate text-sm text-gray-500">
+                {name(other(view.winner))} resigned
+              </span>
+            )
           )}
         </div>
         <div className="flex h-10 gap-2">
-          {seat && (
-            <Button onClick={playAgain}>{view.private ? "New invite" : "Play again"}</Button>
+          {view.rematchId ? (
+            <Link
+              to="/play/$gameId"
+              params={{ gameId: view.rematchId }}
+              className={buttonClass({ className: ROW_BUTTON })}
+            >
+              {seat ? "Go to rematch" : "Watch rematch"}
+            </Link>
+          ) : (
+            seat && (
+              <Button className={ROW_BUTTON} onClick={rematch} disabled={offeredBy === seat}>
+                {offeredBy === seat ? "Rematch offered" : offeredBy ? "Accept rematch" : "Rematch"}
+              </Button>
+            )
           )}
-          <Link to="/leaderboard" className={buttonClass({ intent: "secondary" })}>
+          {seat && (
+            <Button intent="secondary" className={ROW_BUTTON} onClick={playAgain}>
+              New game
+            </Button>
+          )}
+          <Link
+            to="/leaderboard"
+            className={buttonClass({ intent: "secondary", className: ROW_BUTTON })}
+          >
             Leaderboard
           </Link>
         </div>

@@ -40,6 +40,10 @@ export const game = pgTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
     finishedAt: timestamp("finished_at"),
+    /** The seat that offered to play again, once the game is over. */
+    rematchOffer: text("rematch_offer").$type<Player>(),
+    /** Public id of the game both players agreed to play next. */
+    rematchId: text("rematch_id"),
   },
   (table) => [
     index("game_matchmaking_idx")
