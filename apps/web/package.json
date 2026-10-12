@@ -3,11 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -b ../../packages/api && vite build",
-    "serve": "vite preview",
-    "dev": "vite dev",
+    "build": "tsc -b ../../packages/api && dotenvx run -f .env.production -fk ../../.env.keys -- vite build",
+    "serve": "dotenvx run -f .env.production -fk ../../.env.keys -- vite preview",
+    "dev": "dotenvx run -fk ../../.env.keys -- vite dev",
     "check-types": "tsc -b ../../packages/api && vite build && tsc --noEmit",
-    "env:generate": "varlock codegen",
     "test": "bun test"
   },
   "dependencies": {
@@ -25,7 +24,6 @@
     "@thicctactoe/api": "workspace:*",
     "@thicctactoe/game": "workspace:*",
     "@thicctactoe/ui": "workspace:*",
-    "@varlock/vite-integration": "1.5.1",
     "better-auth": "catalog:",
     "class-variance-authority": "^0.7.1",
     "lucide-react": "catalog:",
@@ -34,10 +32,10 @@
     "react-dom": "catalog:",
     "sonner": "catalog:",
     "tailwindcss": "catalog:",
-    "varlock": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@dotenvx/dotenvx": "^2.34.2",
     "@tanstack/react-query-devtools": "^5.102.8",
     "@tanstack/react-router-devtools": "^1.167.1",
     "@testing-library/dom": "^10.4.1",

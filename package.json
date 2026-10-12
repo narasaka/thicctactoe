@@ -10,7 +10,6 @@
       "zod": "^4.5.4",
       "typescript": "^6.0.3",
       "@types/bun": "^1.4.2",
-      "varlock": "1.18.0",
       "@orpc/server": "^1.15.0",
       "@orpc/openapi": "^1.15.0",
       "@orpc/zod": "^1.15.0",
@@ -39,22 +38,22 @@
     "db:studio": "turbo run db:studio -F @thicctactoe/db --",
     "db:generate": "turbo run db:generate -F @thicctactoe/db --",
     "db:migrate": "turbo run db:migrate -F @thicctactoe/db --",
-    "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./apps/server/ && varlock codegen --path ./packages/db/",
-    "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./apps/server/ && varlock codegen --path ./packages/db/",
     "auth:generate": "cd apps/server && bun run auth:generate",
-    "check": "oxlint && oxfmt --write"
+    "check": "oxlint && oxfmt --write",
+    "db:migrate:production": "turbo run db:migrate:production -F @thicctactoe/db --",
+    "env:encrypt": "bun scripts/env-encrypt.ts"
   },
   "dependencies": {
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@dotenvx/dotenvx": "^2.34.2",
     "@thicctactoe/config": "workspace:*",
     "@types/bun": "catalog:",
     "oxfmt": "^0.66.0",
     "oxlint": "^1.81.0",
     "turbo": "^2.10.12",
-    "typescript": "catalog:",
-    "varlock": "catalog:"
+    "typescript": "catalog:"
   },
   "packageManager": "bun@1.4.3"
 }
