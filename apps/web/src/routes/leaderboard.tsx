@@ -9,7 +9,8 @@ import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/leaderboard")({
   head: () => ({ meta: [{ title: "Leaderboard | ThiccTacToe" }] }),
-  loader: ({ context }) => context.queryClient.ensureQueryData(orpc.leaderboard.queryOptions()),
+  // Prefetch never throws, so an API hiccup falls back to loading on the client.
+  loader: ({ context }) => context.queryClient.prefetchQuery(orpc.leaderboard.queryOptions()),
   component: LeaderboardPage,
 });
 

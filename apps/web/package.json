@@ -28,6 +28,7 @@
     "class-variance-authority": "^0.7.1",
     "lucide-react": "catalog:",
     "next-themes": "catalog:",
+    "nitro": "^3.0.260903-beta",
     "react": "catalog:",
     "react-dom": "catalog:",
     "sonner": "catalog:",

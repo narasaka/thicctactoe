@@ -7,5 +7,7 @@ export default defineConfig({
   clean: true,
   deps: {
     alwaysBundle: [/@thicctactoe\/.*/],
+    // Bun built-ins (S3Client) are provided by the runtime.
+    neverBundle: ["bun"],
   },
 });
