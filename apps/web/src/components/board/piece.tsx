@@ -6,7 +6,7 @@ import { Pentagon, Square, Triangle } from "lucide-react";
 import type { ComponentProps } from "react";
 
 const piece = cva(
-  "flex touch-none items-center justify-center rounded-full font-semibold shadow-lg select-none md:transition-opacity md:duration-500",
+  "flex shrink-0 touch-none items-center justify-center rounded-full font-semibold shadow-lg select-none md:transition-opacity md:duration-500",
   {
     variants: {
       size: {
