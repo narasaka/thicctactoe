@@ -7,7 +7,8 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "check-types": "tsc -b"
+    "check-types": "tsc -b",
+    "test": "bun test"
   },
   "dependencies": {
     "@better-auth/core": "1.7.7",
