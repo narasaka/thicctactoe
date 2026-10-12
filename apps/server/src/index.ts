@@ -22,6 +22,9 @@ app.use(
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,
+    // Cache preflights (browsers cap this, Chrome at two hours) so every RPC
+    // after the first is one round trip instead of two.
+    maxAge: 86_400,
   }),
 );
 
