@@ -51,6 +51,30 @@ export function PieceView({
   );
 }
 
+const badge = cva("grid size-6 shrink-0 place-items-center rounded-full", {
+  variants: {
+    player: {
+      X: "bg-emerald-400 text-emerald-600",
+      O: "bg-indigo-400 text-indigo-600",
+    },
+  },
+});
+
+/** A piece at text size, for move lists. */
+export function PieceBadge({
+  player,
+  size,
+  className,
+  ...props
+}: PieceProps & ComponentProps<"span">) {
+  const Icon = ICONS[size];
+  return (
+    <span className={badge({ player, className })} {...props}>
+      <Icon fill="currentColor" strokeWidth={0} className="size-3.5" />
+    </span>
+  );
+}
+
 export function DraggablePiece({
   id,
   disabled,

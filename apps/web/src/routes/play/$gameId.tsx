@@ -164,6 +164,14 @@ function Status({ view, turn, resign }: { view: MatchView; turn: Player; resign:
           {seat && (
             <Button onClick={playAgain}>{view.private ? "New invite" : "Play again"}</Button>
           )}
+          <Link
+            to="/history/$gameId"
+            params={{ gameId: view.id }}
+            search={{ move: 0 }}
+            className={buttonClass({ intent: "secondary" })}
+          >
+            Replay
+          </Link>
           <Link to="/leaderboard" className={buttonClass({ intent: "secondary" })}>
             Leaderboard
           </Link>

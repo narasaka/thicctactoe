@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { type Game, type Move, newGame, piecesLeft, play, replay } from "./index";
+import { type Game, type Move, newGame, piecesLeft, play, positions, replay } from "./index";
 
 const X = (size: Move["size"], cell: number): Move => ({ player: "X", size, cell });
 const O = (size: Move["size"], cell: number): Move => ({ player: "O", size, cell });
@@ -90,5 +90,23 @@ describe("play", () => {
 describe("replay", () => {
   test("throws on an illegal move", () => {
     expect(() => replay([X("small", 0), X("small", 1)])).toThrow("Illegal move #1: not_your_turn");
+  });
+});
+
+describe("positions", () => {
+  test("lists every position from the empty board to the last move", () => {
+    const moves = [X("small", 4), O("medium", 4), X("large", 4)];
+    const all = positions(moves);
+    expect(all).toHaveLength(4);
+    expect(all[0]).toEqual(newGame());
+    expect(all[1]!.board[4]).toEqual({ player: "X", size: "small" });
+    expect(all[2]!.board[4]).toEqual({ player: "O", size: "medium" });
+    expect(all[3]).toEqual(replay(moves));
+  });
+
+  test("throws on an illegal move", () => {
+    expect(() => positions([X("small", 0), X("small", 1)])).toThrow(
+      "Illegal move #1: not_your_turn",
+    );
   });
 });
