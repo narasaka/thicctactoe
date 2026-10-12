@@ -24,8 +24,8 @@ const COLOR_NAMES = { X: "Green", O: "Purple" } as const;
 /** Long enough to take in the final board before the nudge covers it. */
 const NUDGE_DELAY_MS = 1500;
 
-/** Three end-of-game buttons have to share one row on a phone. */
-const ROW_BUTTON = "whitespace-nowrap max-sm:px-3 max-sm:text-sm";
+/** Secondary actions under the board, kept quiet next to the main button. */
+const TEXT_LINK = "text-sm whitespace-nowrap text-neutral-400 underline hover:text-neutral-600";
 
 function MatchPage() {
   const { gameId } = Route.useParams();
@@ -84,6 +84,7 @@ function Match({ gameId }: { gameId: string }) {
       active={playing && game.turn === player}
       you={seat === player}
       delta={view.ratingDelta?.[player]}
+      callout={view.rematchOffer === player ? "Rematch?" : undefined}
     />
   );
 
@@ -189,51 +190,26 @@ function Status({
       void (view.private ? client.arena.invite() : client.arena.quickMatch()).then(({ id }) =>
         navigate({ to: "/play/$gameId", params: { gameId: id } }),
       );
-    const offeredBy = view.rematchOffer;
     return (
       <>
         <div className="flex h-10 items-baseline gap-2">
           <span className="text-3xl font-extrabold tracking-tight whitespace-nowrap sm:text-4xl">
             {headline}
           </span>
-          {seat && offeredBy === other(seat) ? (
+          {view.endReason === "resign" && view.winner && (
             <span className="truncate text-sm text-gray-500">
-              {name(offeredBy)} wants a rematch
+              {name(other(view.winner))} resigned
             </span>
-          ) : (
-            view.endReason === "resign" &&
-            view.winner && (
-              <span className="truncate text-sm text-gray-500">
-                {name(other(view.winner))} resigned
-              </span>
-            )
           )}
         </div>
-        <div className="flex h-10 gap-2">
-          {view.rematchId ? (
-            <Link
-              to="/play/$gameId"
-              params={{ gameId: view.rematchId }}
-              className={buttonClass({ className: ROW_BUTTON })}
-            >
-              {seat ? "Go to rematch" : "Watch rematch"}
-            </Link>
-          ) : (
-            seat && (
-              <Button className={ROW_BUTTON} onClick={rematch} disabled={offeredBy === seat}>
-                {offeredBy === seat ? "Rematch offered" : offeredBy ? "Accept rematch" : "Rematch"}
-              </Button>
-            )
-          )}
+        <div className="flex h-10 items-center gap-4">
+          <RematchAction view={view} rematch={rematch} />
           {seat && (
-            <Button intent="secondary" className={ROW_BUTTON} onClick={playAgain}>
+            <button className={TEXT_LINK} onClick={playAgain}>
               New game
-            </Button>
+            </button>
           )}
-          <Link
-            to="/leaderboard"
-            className={buttonClass({ intent: "secondary", className: ROW_BUTTON })}
-          >
+          <Link to="/leaderboard" className={TEXT_LINK}>
             Leaderboard
           </Link>
         </div>
@@ -265,15 +241,37 @@ function Status({
             </Button>
           </>
         ) : (
-          <button
-            className="text-sm text-neutral-400 underline hover:text-neutral-600"
-            onClick={() => setConfirming(true)}
-          >
+          <button className={TEXT_LINK} onClick={() => setConfirming(true)}>
             Resign
           </button>
         )}
       </div>
     </>
+  );
+}
+
+/** Offer a rematch, accept one, or follow it once agreed. */
+function RematchAction({ view, rematch }: { view: MatchView; rematch: () => void }) {
+  if (view.rematchId) {
+    return (
+      <Link to="/play/$gameId" params={{ gameId: view.rematchId }} className={buttonClass()}>
+        {view.seat ? "Go to rematch" : "Watch rematch"}
+      </Link>
+    );
+  }
+  if (!view.seat) return null;
+  if (view.rematchOffer === view.seat) {
+    return (
+      <span className="flex items-center gap-2 whitespace-nowrap text-gray-600">
+        <Loader2 className="size-4 animate-spin" />
+        Rematch sent
+      </span>
+    );
+  }
+  return (
+    <Button onClick={rematch} className="whitespace-nowrap">
+      {view.rematchOffer ? "Accept rematch" : "Rematch"}
+    </Button>
   );
 }
 
