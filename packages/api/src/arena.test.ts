@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb } from "@thicctactoe/db";
-import { playerStats, user } from "@thicctactoe/db/schema/index";
+import { game as gameTable, playerStats, user } from "@thicctactoe/db/schema/index";
 import type { Move } from "@thicctactoe/game";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
@@ -141,6 +141,107 @@ describe("moves", () => {
     const game = await arena.resign(id, X);
     expect(game).toMatchObject({ status: "finished", winner: "O", endReason: "resign" });
     expect(await statsOf(O)).toMatchObject({ wins: 1 });
+  });
+});
+
+describe("rematch", () => {
+  test("starts once both players agree, with colors swapped", async () => {
+    const { id, X, O } = await startGame();
+    await expect(arena.rematch(id, X)).rejects.toThrow("not over yet");
+    await arena.resign(id, O);
+
+    const offered = await arena.rematch(id, X);
+    expect(offered).toMatchObject({ rematchOffer: "X", rematchId: null });
+    // Offering again changes nothing; only the opponent can accept.
+    expect(await arena.rematch(id, X)).toMatchObject({ rematchOffer: "X", rematchId: null });
+
+    const accepted = await arena.rematch(id, O);
+    expect(accepted.rematchOffer).toBeNull();
+    const next = await arena.view(accepted.rematchId!, X);
+    expect(next).toMatchObject({ status: "active", private: true, seat: "O", moves: [] });
+    expect(next.startedAt).not.toBeNull();
+    expect((await arena.view(next.id, O)).seat).toBe("X");
+    // A late click joins the same rematch rather than starting another.
+    expect((await arena.rematch(id, X)).rematchId).toBe(next.id);
+  });
+
+  test("only the players can ask for one", async () => {
+    const { id, O } = await startGame();
+    await arena.resign(id, O);
+    const late = await addUser("late");
+    await expect(arena.rematch(id, late)).rejects.toThrow("not playing");
+  });
+});
+
+describe("move log", () => {
+  test("every move is logged with the time the server accepted it", async () => {
+    const before = new Date();
+    const { id, X, O } = await startGame();
+    const moves = WIN_FOR_X("X");
+    for (const move of moves) await arena.move(id, move.player === "X" ? X : O, move);
+
+    const game = await arena.view(id, null);
+    expect(game.moves).toMatchObject(moves);
+    const times = game.moves.map((move) => new Date(move.at!).getTime());
+    expect(times).toEqual([...times].sort());
+    expect(game.startedAt!.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(game.startedAt!.getTime()).toBeLessThanOrEqual(times[0]!);
+    expect(game.finishedAt!.getTime()).toBeGreaterThanOrEqual(times.at(-1)!);
+  });
+});
+
+describe("history", () => {
+  test("lists a player's finished games, newest first, from their side", async () => {
+    const { id: won, X, O } = await startGame();
+    for (const move of WIN_FOR_X("X")) await arena.move(won, move.player === "X" ? X : O, move);
+    const resigned = await arena.invite(X);
+    await arena.join(resigned, O);
+    await arena.resign(resigned, X);
+    // Neither unfinished games nor other people's games are listed.
+    await arena.invite(X);
+    const stranger = await addUser("stranger");
+    await arena.join(await arena.invite(stranger), await addUser("friend"));
+
+    const { games, next } = await arena.history(O);
+    expect(next).toBeNull();
+    expect(games).toEqual([
+      expect.objectContaining({
+        id: resigned,
+        opponent: { name: X, image: null, anonymous: false },
+        result: "win",
+        endReason: "resign",
+        moveCount: 0,
+      }),
+      expect.objectContaining({
+        id: won,
+        seat: "O",
+        result: "loss",
+        endReason: "line",
+        ratingDelta: -16,
+        moveCount: 5,
+      }),
+    ]);
+    expect((await arena.history(X)).games.map((game) => game.result)).toEqual(["loss", "win"]);
+  });
+
+  test("pages through games with a cursor", async () => {
+    const a = await addUser("a");
+    const b = await addUser("b");
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const id = await arena.invite(a);
+      await arena.join(id, b);
+      await arena.resign(id, b);
+      ids.push(id);
+    }
+    // Games finished in the same instant must neither repeat nor go missing.
+    await db.update(gameTable).set({ finishedAt: new Date("2026-01-01") });
+
+    const first = await arena.history(a, { limit: 2 });
+    expect(first.games).toHaveLength(2);
+    const second = await arena.history(a, { limit: 2, after: first.next! });
+    expect([...first.games, ...second.games].map((game) => game.id).sort()).toEqual(ids.sort());
+    expect(second.next).toBeNull();
   });
 });
 

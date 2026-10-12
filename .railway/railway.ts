@@ -15,7 +15,8 @@ export default defineRailway(() => {
     build: {
       builder: "RAILPACK",
       buildCommand: "bunx turbo run build --filter=server",
-      // Only the server and the packages it builds from; web and ui changes don't redeploy.
+      // Only the server and the workspace packages it depends on; frontend-only
+      // changes (apps/web, packages/ui) don't redeploy the API.
       watchPatterns: [
         "/apps/server/**",
         "/packages/api/**",

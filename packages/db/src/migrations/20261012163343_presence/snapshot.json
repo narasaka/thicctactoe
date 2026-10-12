@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "72fb1871-a416-4339-a73e-e5293fe322da",
-  "prevIds": ["1aa76058-8b98-4e9c-8375-acf5fb389d5f"],
+  "id": "6b2af9a9-631e-4dbc-9ac3-6e4340d20349",
+  "prevIds": ["660065e4-0f5f-474a-ad86-b5fe6f8b568a"],
   "ddl": [
     {
       "values": ["line", "draw", "resign"],
@@ -712,7 +712,46 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "game"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "finished_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "game"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rematch_offer",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "game"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rematch_id",
       "entityType": "columns",
       "schema": "public",
       "table": "game"

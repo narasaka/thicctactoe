@@ -1,31 +1,36 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { type Player, other } from "@thicctactoe/game";
+import type { Player } from "@thicctactoe/game";
 import { cn } from "@thicctactoe/ui/lib/utils";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 
 import GameBoard from "@/components/board/game-board";
 import Button, { buttonClass } from "@/components/button";
+import GameOverDialog, { GameOverActions, gameResult } from "@/components/game-over";
 import Layout from "@/components/layout";
-import PlayerCard from "@/components/player-card";
-import SignInNudge from "@/components/sign-in-nudge";
+import PlayerCard, { piecesUsed } from "@/components/player-card";
 import { useMatch } from "@/lib/match";
 import type { MatchView } from "@/lib/match-view";
 import { useGuestSession } from "@/lib/session";
-import { client } from "@/utils/orpc";
 
 export const Route = createFileRoute("/play/$gameId")({
   ssr: false,
   component: MatchPage,
 });
 
-const COLOR_NAMES = { X: "Green", O: "Purple" } as const;
+/** Long enough to see the winning line before the result covers the board. */
+const GAME_OVER_DELAY_MS = 900;
 
-/** Long enough to take in the final board before the nudge covers it. */
-const NUDGE_DELAY_MS = 1500;
+/** A quiet text action, for resigning. */
+const TEXT_LINK = "text-sm whitespace-nowrap text-neutral-400 underline hover:text-neutral-600";
 
 function MatchPage() {
   const { gameId } = Route.useParams();
+  // A rematch is a new game: start its page from scratch.
+  return <Match key={gameId} gameId={gameId} />;
+}
+
+function Match({ gameId }: { gameId: string }) {
   const session = useGuestSession();
   const match = useMatch(gameId, session?.user.id);
   const { view, game, seat, error, join } = match;
@@ -36,7 +41,8 @@ function MatchPage() {
     if (joinable && join.isIdle) join.mutate();
   }, [joinable, join]);
 
-  const nudge = useSignInNudge(view, session?.user.isAnonymous ?? false);
+  const gameOver = useGameOverDialog(view);
+  useFollowRematch(view);
 
   if (error) {
     return (
@@ -74,114 +80,113 @@ function MatchPage() {
       player={view.players[player]}
       active={playing && game.turn === player}
       you={seat === player}
+      used={piecesUsed(game, player)}
       delta={view.ratingDelta?.[player]}
+      callout={view.rematchOffer === player ? "Rematch?" : undefined}
     />
   );
 
   return (
-    <Layout>
-      <div className="mx-auto mb-6 grid w-full max-w-2xl grid-cols-[1fr_auto_1fr] items-center gap-3">
-        {card("X")}
-        <span className="text-sm font-semibold text-neutral-400">vs</span>
-        {card("O")}
-      </div>
+    <Layout fit>
       <GameBoard
         key={view.id}
         game={game}
         seats={seat ? [seat] : []}
         locked={!playing}
         onMove={(move) => match.move.mutate(move)}
-        status={<Status view={view} turn={game.turn} resign={() => match.resign.mutate()} />}
+        players={{ X: card("X"), O: card("O") }}
+        status={
+          <Status
+            view={view}
+            turn={game.turn}
+            resign={() => match.resign.mutate()}
+            rematch={() => match.rematch.mutate()}
+          />
+        }
       />
-      {seat && view.players[seat] && (
-        <SignInNudge
-          open={nudge.open}
-          onOpenChange={nudge.setOpen}
-          player={view.players[seat]}
-          result={view.winner === null ? "tie" : view.winner === seat ? "win" : "loss"}
-          delta={view.ratingDelta?.[seat]}
-        />
-      )}
+      <GameOverDialog
+        view={view}
+        open={gameOver.open}
+        onOpenChange={gameOver.setOpen}
+        guest={session?.user.isAnonymous ?? false}
+        rematch={() => match.rematch.mutate()}
+      />
     </Layout>
   );
 }
 
 /**
- * Opens once a guest finishes a game they watched being played, to get them
- * onto the leaderboard. Revisiting an old game does not nag.
+ * Opens once a game everyone watched being played ends. Revisiting an old
+ * game does not pop it up again.
  */
-function useSignInNudge(view: MatchView | null, guest: boolean) {
+function useGameOverDialog(view: MatchView | null) {
   const [open, setOpen] = useState(false);
   const [watched, setWatched] = useState<string | null>(null);
   if (view?.status === "active" && watched !== view.id) setWatched(view.id);
-  const due = guest && view?.status === "finished" && view.seat !== null && watched === view.id;
+  const due = view?.status === "finished" && watched === view.id;
 
   useEffect(() => {
     if (!due) return;
-    const timer = setTimeout(() => setOpen(true), NUDGE_DELAY_MS);
+    const timer = setTimeout(() => setOpen(true), GAME_OVER_DELAY_MS);
     return () => clearTimeout(timer);
   }, [due]);
 
-  return { open: open && guest, setOpen };
+  return { open, setOpen };
 }
 
 /**
- * Two fixed rows inside the board's fixed-height status area, so switching
- * between turn, resign confirmation and result never moves anything.
+ * Moves everyone watching on to the rematch as soon as it is agreed. Opening
+ * an old game whose rematch was played long ago stays put.
  */
-function Status({ view, turn, resign }: { view: MatchView; turn: Player; resign: () => void }) {
+function useFollowRematch(view: MatchView | null) {
   const navigate = useNavigate();
+  const [watched, setWatched] = useState(false);
+  if (view?.status === "finished" && view.rematchId === null && !watched) setWatched(true);
+  const next = watched ? view?.rematchId : null;
+
+  useEffect(() => {
+    if (next) void navigate({ to: "/play/$gameId", params: { gameId: next } });
+  }, [next, navigate]);
+}
+
+/**
+ * Fits the board's fixed-height status area: one row while playing (whose
+ * turn it is shows on the player cards), two once the game is over, so
+ * switching between turn, resign confirmation and result never moves anything.
+ */
+function Status({
+  view,
+  turn,
+  resign,
+  rematch,
+}: {
+  view: MatchView;
+  turn: Player;
+  resign: () => void;
+  rematch: () => void;
+}) {
   const [confirming, setConfirming] = useState(false);
   const { seat } = view;
-  const name = (player: Player) => view.players[player]?.name ?? COLOR_NAMES[player];
 
   if (view.status === "finished") {
-    const headline =
-      view.winner === null
-        ? "It's a tie!"
-        : seat === null
-          ? `${name(view.winner)} wins`
-          : view.winner === seat
-            ? "You win!"
-            : "You lose";
-    const playAgain = () =>
-      void (view.private ? client.arena.invite() : client.arena.quickMatch()).then(({ id }) =>
-        navigate({ to: "/play/$gameId", params: { gameId: id } }),
-      );
+    const { headline, reason } = gameResult(view);
     return (
       <>
         <div className="flex h-10 items-baseline gap-2">
-          <span className="text-3xl font-extrabold tracking-tight whitespace-nowrap sm:text-4xl">
+          <span className="text-2xl font-extrabold tracking-tight whitespace-nowrap">
             {headline}
           </span>
-          {view.endReason === "resign" && view.winner && (
-            <span className="truncate text-sm text-gray-500">
-              {name(other(view.winner))} resigned
-            </span>
-          )}
+          <span className="truncate text-sm text-gray-500">{reason}</span>
         </div>
-        <div className="flex h-10 gap-2">
-          {seat && (
-            <Button onClick={playAgain}>{view.private ? "New invite" : "Play again"}</Button>
-          )}
-          <Link to="/leaderboard" className={buttonClass({ intent: "secondary" })}>
-            Leaderboard
-          </Link>
-        </div>
+        <GameOverActions view={view} rematch={rematch} variant="inline" />
       </>
     );
   }
 
   return (
-    <>
-      <div className="flex h-10 items-center text-gray-600">
-        {seat === null
-          ? `${name(turn)}'s turn`
-          : turn === seat
-            ? "Your turn"
-            : `Waiting for ${name(turn)}…`}
-      </div>
-      <div className={cn("flex h-10 items-center gap-2", !seat && "invisible")} inert={!seat}>
+    <div className="flex h-10 w-full items-center justify-between gap-2">
+      <span className="font-semibold text-gray-700">{turn === seat && "Your turn"}</span>
+      <div className={cn("flex items-center gap-2", !seat && "invisible")} inert={!seat}>
         {confirming ? (
           <>
             <Button
@@ -196,15 +201,12 @@ function Status({ view, turn, resign }: { view: MatchView; turn: Player; resign:
             </Button>
           </>
         ) : (
-          <button
-            className="text-sm text-neutral-400 underline hover:text-neutral-600"
-            onClick={() => setConfirming(true)}
-          >
+          <button className={TEXT_LINK} onClick={() => setConfirming(true)}>
             Resign
           </button>
         )}
       </div>
-    </>
+    </div>
   );
 }
 

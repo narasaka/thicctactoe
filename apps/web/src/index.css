@@ -5,7 +5,31 @@
   --breakpoint-wide: 70rem;
 }
 
-/* A scrollbar appearing or disappearing must never shift the page sideways. */
+/* Screens too short for dialogs at full size, e.g. small phones with browser bars. */
+@custom-variant short (@media (max-height: 42rem));
+
+/* A scrollbar appearing or disappearing must never shift the page sideways.
+   The reserved gutter shows the root background, so it must match the pages. */
 html {
   scrollbar-gutter: stable;
+  @apply bg-neutral-100;
+}
+
+@theme {
+  /* An hourglass turning over, then resting while the sand runs. */
+  --animate-hourglass: hourglass 2.4s ease-in-out infinite;
+
+  @keyframes hourglass {
+    0%,
+    35% {
+      rotate: 0deg;
+    }
+    50%,
+    85% {
+      rotate: 180deg;
+    }
+    100% {
+      rotate: 360deg;
+    }
+  }
 }

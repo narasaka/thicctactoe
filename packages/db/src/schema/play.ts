@@ -15,6 +15,12 @@ import {
 import { publicId } from "../public-id";
 import { user } from "./auth";
 
+/** A move as stored: the move itself plus when the server accepted it. */
+export type LoggedMove = Move & {
+  /** ISO timestamp. Missing on moves played before move times were logged. */
+  at?: string;
+};
+
 export const gameStatus = pgEnum("game_status", ["waiting", "active", "finished", "cancelled"]);
 export const gameEndReason = pgEnum("game_end_reason", ["line", "draw", "resign"]);
 
@@ -30,7 +36,7 @@ export const game = pgTable(
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     playerX: text("player_x").references(() => user.id, { onDelete: "set null" }),
     playerO: text("player_o").references(() => user.id, { onDelete: "set null" }),
-    moves: jsonb("moves").$type<Move[]>().default([]).notNull(),
+    moves: jsonb("moves").$type<LoggedMove[]>().default([]).notNull(),
     winner: text("winner").$type<Player>(),
     endReason: gameEndReason("end_reason"),
     ratingDelta: jsonb("rating_delta").$type<Record<Player, number>>(),
@@ -39,7 +45,13 @@ export const game = pgTable(
       .defaultNow()
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
+    /** When the second player sat down. */
+    startedAt: timestamp("started_at"),
     finishedAt: timestamp("finished_at"),
+    /** The seat that offered to play again, once the game is over. */
+    rematchOffer: text("rematch_offer").$type<Player>(),
+    /** Public id of the game both players agreed to play next. */
+    rematchId: text("rematch_id"),
   },
   (table) => [
     index("game_matchmaking_idx")
