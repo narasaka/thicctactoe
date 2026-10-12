@@ -4,7 +4,7 @@ import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   server: {
     port: 3001,
   },
@@ -13,6 +13,13 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  ssr: {
+    // Production builds bundle every dependency into the server: serverless
+    // functions ship without node_modules, and CommonJS deps
+    // (use-sync-external-store) would otherwise keep a runtime require("react")
+    // that cannot be resolved. Dev keeps Vite's default externals.
+    noExternal: command === "build" ? true : undefined,
+  },
   plugins: [
     tailwindcss(),
     tanstackStart(),
@@ -20,4 +27,4 @@ export default defineConfig({
     nitro(),
     viteReact(),
   ],
-});
+}));
