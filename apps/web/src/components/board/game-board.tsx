@@ -19,6 +19,7 @@ export default function GameBoard({
   game,
   seats,
   locked = false,
+  markLastMove = false,
   onMove,
   status,
 }: {
@@ -27,6 +28,8 @@ export default function GameBoard({
   seats: readonly Player[];
   /** Disallow moves regardless of the rules, e.g. once an online game has ended. */
   locked?: boolean;
+  /** Outline the cell of the most recent move, e.g. when replaying. */
+  markLastMove?: boolean;
   onMove: (move: Move) => void;
   /** Rendered in a fixed-height area under the board. Must fit in h-24. */
   status?: ReactNode;
@@ -35,6 +38,7 @@ export default function GameBoard({
   const playing = game.outcome.status === "playing" && !locked;
   const canMove = (player: Player) => playing && game.turn === player && seats.includes(player);
   const line: readonly number[] = game.outcome.status === "won" ? game.outcome.line : [];
+  const last = markLastMove ? game.moves.at(-1)?.cell : undefined;
 
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
     if (over === null) return;
@@ -74,7 +78,12 @@ export default function GameBoard({
         <div className="hidden [grid-area:x] md:block">{tray("X", "desktop")}</div>
         <div className="grid grid-cols-3 gap-2 [grid-area:board]">
           {game.board.map((piece, cell) => (
-            <Cell key={cell} index={cell} piece={piece} highlighted={line.includes(cell)} />
+            <Cell
+              key={cell}
+              index={cell}
+              piece={piece}
+              mark={line.includes(cell) ? "line" : cell === last ? "last" : "none"}
+            />
           ))}
         </div>
         <div className="hidden [grid-area:o] md:block">{tray("O", "desktop")}</div>
