@@ -8,16 +8,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@thicctactoe/ui/components/dropdown-menu";
-import { toast } from "sonner";
 
-import { type Provider, authClient, signInWith } from "@/lib/auth-client";
+import { PROVIDERS, authClient, signInWith } from "@/lib/auth-client";
 
 import Avatar from "./avatar";
-
-const PROVIDERS: { id: Provider; label: string }[] = [
-  { id: "google", label: "Sign in with Google" },
-  { id: "github", label: "Sign in with GitHub" },
-];
 
 export default function UserBadge() {
   const navigate = useNavigate();
@@ -26,10 +20,6 @@ export default function UserBadge() {
 
   const user = session?.user;
   const guest = !user || user.isAnonymous;
-  const signIn = (provider: Provider) =>
-    void signInWith(provider).then(({ error }) => {
-      if (error) toast.error(error.message ?? "Sign in failed");
-    });
 
   return (
     <DropdownMenu>
@@ -46,9 +36,9 @@ export default function UserBadge() {
                 : "Sign in to join the leaderboard."}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {PROVIDERS.map(({ id, label }) => (
-              <DropdownMenuItem key={id} onClick={() => signIn(id)}>
-                {label}
+            {PROVIDERS.map(({ id, name }) => (
+              <DropdownMenuItem key={id} onClick={() => signInWith(id)}>
+                Sign in with {name}
               </DropdownMenuItem>
             ))}
           </DropdownMenuGroup>
