@@ -11,6 +11,21 @@ import { ENV } from "./env";
 export const db = createDb(ENV);
 export const arena = createArena({ db });
 
+// `bun --hot` re-runs this module in the same process: retire the previous arena.
+const live = globalThis as { arena?: typeof arena };
+if (live.arena) void live.arena.close();
+else {
+  // Railway sends SIGTERM once the next deployment is taking traffic. Hand live
+  // games over to it before exiting.
+  process.once("SIGTERM", () => {
+    void live
+      .arena!.close()
+      .catch((error) => console.error("arena close failed", error))
+      .finally(() => process.exit(0));
+  });
+}
+live.arena = arena;
+
 const bucket = new S3Client({
   accessKeyId: ENV.S3_ACCESS_KEY_ID,
   secretAccessKey: ENV.S3_SECRET_ACCESS_KEY,

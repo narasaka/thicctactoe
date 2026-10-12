@@ -4,10 +4,12 @@ import {
   type LoggedMove,
   game as gameTable,
   playerStats,
+  presence,
   user,
 } from "@thicctactoe/db/schema/index";
 import { type Move, type Player, other, play, replay } from "@thicctactoe/game";
-import { and, asc, desc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, notExists, or, sql } from "drizzle-orm";
+import type { PoolClient } from "pg";
 
 import { ratingChange } from "./rating";
 
@@ -18,8 +20,9 @@ export type { LoggedMove };
  * updates. Every mutation is validated against the shared rules in
  * `@thicctactoe/game`, and every change is pushed to watchers of that game.
  *
- * Live updates and presence are kept in memory, so the server must run as a
- * single instance.
+ * Changes are announced over Postgres NOTIFY and presence lives in the
+ * database, so any number of server instances can run side by side, which is
+ * what a zero-downtime deploy does for a moment.
  */
 export type Arena = ReturnType<typeof createArena>;
 
@@ -88,45 +91,64 @@ type GameRow = typeof gameTable.$inferSelect;
 type Snapshot = { view: Omit<MatchView, "seat">; seats: Record<Player, string | null> };
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
+/** Postgres channel carrying the public ids of games that changed. */
+const CHANNEL = "arena";
+
 export type ArenaOptions = {
   db: Database;
   /** Public games older than this are not offered by matchmaking. */
   matchmakingWindowMs?: number;
   /** How long a waiting game survives after its creator disconnects. */
   abandonGraceMs?: number;
+  /** How often this instance refreshes its presence and sweeps up dead games. */
+  heartbeatMs?: number;
+  /** Presence not refreshed for this long belongs to an instance that died. */
+  staleMs?: number;
 };
 
 export function createArena({
   db,
   matchmakingWindowMs = 10 * 60_000,
   abandonGraceMs = 30_000,
+  heartbeatMs = 5_000,
+  staleMs = 20_000,
 }: ArenaOptions) {
   const publisher = new EventPublisher<Record<string, Snapshot>>();
-  /** gameId -> userId -> open watch streams */
-  const presence = new Map<string, Map<string, number>>();
-  const abandonTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** gameId -> open watch streams on this instance */
+  const watching = new Map<string, number>();
+  /** Presence rows of this instance's watch streams. */
+  const connections = new Set<string>();
+  /** gameId -> pending delivery, so snapshots go out in the order they were read */
+  const deliveries = new Map<string, Promise<void>>();
+  const closing = new AbortController();
 
-  const isOnline = (gameId: string, userId: string | null) =>
-    userId !== null && (presence.get(gameId)?.get(userId) ?? 0) > 0;
+  const ago = (ms: number) => sql`now() - make_interval(secs => ${ms / 1000})`;
+  const fresh = and(isNull(presence.leftAt), gt(presence.seenAt, ago(staleMs)));
 
   async function snapshot(gameId: string): Promise<Snapshot> {
     const row = await db.query.game.findFirst({ where: { publicId: gameId } });
     if (!row) throw new ORPCError("NOT_FOUND", { message: "Game not found" });
 
     const ids = [row.playerX, row.playerO].filter((id) => id !== null);
-    const players = ids.length
-      ? await db
-          .select({
-            id: user.id,
-            name: user.name,
-            image: user.image,
-            anonymous: user.isAnonymous,
-            rating: playerStats.rating,
-          })
-          .from(user)
-          .leftJoin(playerStats, eq(playerStats.userId, user.id))
-          .where(inArray(user.id, ids))
-      : [];
+    const [players, online] = ids.length
+      ? await Promise.all([
+          db
+            .select({
+              id: user.id,
+              name: user.name,
+              image: user.image,
+              anonymous: user.isAnonymous,
+              rating: playerStats.rating,
+            })
+            .from(user)
+            .leftJoin(playerStats, eq(playerStats.userId, user.id))
+            .where(inArray(user.id, ids)),
+          db
+            .selectDistinct({ userId: presence.userId })
+            .from(presence)
+            .where(and(eq(presence.gameId, gameId), fresh)),
+        ])
+      : [[], []];
     const seat = (userId: string | null): PlayerView | null => {
       const found = players.find((p) => p.id === userId);
       if (!found) return null;
@@ -135,7 +157,7 @@ export function createArena({
         image: found.image,
         anonymous: found.anonymous ?? false,
         rating: found.rating ?? 1000,
-        online: isOnline(gameId, found.id),
+        online: online.some((p) => p.userId === found.id),
       };
     };
 
@@ -168,9 +190,65 @@ export function createArena({
     return forViewer(await snapshot(gameId), viewerId);
   }
 
+  /** Tells every instance, this one included, that the game changed. */
   async function broadcast(gameId: string) {
-    publisher.publish(gameId, await snapshot(gameId));
+    await db.execute(sql`select pg_notify(${CHANNEL}, ${gameId})`);
   }
+
+  /** Pushes the game's current state to its watchers on this instance. */
+  function deliver(gameId: string) {
+    if (!watching.has(gameId)) return;
+    const delivery: Promise<void> = (deliveries.get(gameId) ?? Promise.resolve())
+      .then(async () => publisher.publish(gameId, await snapshot(gameId)))
+      .catch((error) => console.error("delivery failed", error))
+      .finally(() => {
+        if (deliveries.get(gameId) === delivery) deliveries.delete(gameId);
+      });
+    deliveries.set(gameId, delivery);
+  }
+
+  /** Holds a connection that LISTENs for changes, reconnecting if it drops. */
+  function listen() {
+    const { promise: ready, resolve } = Promise.withResolvers<void>();
+    let current: PoolClient | undefined;
+
+    // Destroyed rather than returned to the pool, which would keep it listening.
+    function drop(client: PoolClient, error?: Error) {
+      if (current !== client) return;
+      current = undefined;
+      client.release(error ?? true);
+      if (error && !closing.signal.aborted) {
+        console.error("arena listener lost", error);
+        setTimeout(connect, 1_000);
+      }
+    }
+
+    async function connect() {
+      if (closing.signal.aborted) return;
+      const client = await db.$client.connect().catch((error: Error) => {
+        console.error("arena listener failed to connect", error);
+        setTimeout(connect, 1_000);
+      });
+      if (!client) return;
+      if (closing.signal.aborted) return client.release(true);
+      current = client;
+      client.on("notification", ({ payload }) => payload && deliver(payload));
+      client.on("error", (error) => drop(client, error));
+      try {
+        await client.query(`listen ${CHANNEL}`);
+      } catch (error) {
+        return drop(client, error as Error);
+      }
+      resolve();
+      // Anything announced while we were not listening was missed.
+      for (const gameId of watching.keys()) deliver(gameId);
+    }
+
+    void connect();
+    return { ready, stop: () => current && drop(current) };
+  }
+
+  const listener = listen();
 
   async function lock(tx: Tx, gameId: string) {
     const [row] = await tx
@@ -260,46 +338,75 @@ export function createArena({
       .where(eq(gameTable.id, row.id));
   }
 
-  function connect(gameId: string, userId: string) {
-    const users = presence.get(gameId) ?? new Map<string, number>();
-    users.set(userId, (users.get(userId) ?? 0) + 1);
-    presence.set(gameId, users);
-    clearTimeout(abandonTimers.get(gameId));
-    abandonTimers.delete(gameId);
+  /** Marks a player as watching; returns the presence id to release later. */
+  async function connect(gameId: string, userId: string) {
+    const id = crypto.randomUUID();
+    await db.insert(presence).values({ id, gameId, userId });
+    connections.add(id);
+    return id;
   }
 
-  function disconnect(gameId: string, userId: string) {
-    const users = presence.get(gameId);
-    if (!users) return;
-    const count = (users.get(userId) ?? 1) - 1;
-    if (count > 0) return void users.set(userId, count);
-    users.delete(userId);
-    if (users.size > 0) return;
-    presence.delete(gameId);
-    scheduleAbandon(gameId);
+  async function disconnect(ids: string[]) {
+    for (const id of ids) connections.delete(id);
+    if (!ids.length) return [];
+    return db
+      .update(presence)
+      .set({ leftAt: sql`now()` })
+      .where(and(inArray(presence.id, ids), isNull(presence.leftAt)))
+      .returning({ gameId: presence.gameId });
   }
 
-  /** A waiting game nobody is watching would strand whoever joins it. */
-  function scheduleAbandon(gameId: string) {
-    clearTimeout(abandonTimers.get(gameId));
-    abandonTimers.set(
-      gameId,
-      setTimeout(() => {
-        abandonTimers.delete(gameId);
-        void abandon(gameId).catch((error) => console.error("abandon failed", error));
-      }, abandonGraceMs),
-    );
+  async function broadcastAll(rows: { gameId: string }[]) {
+    await Promise.all([...new Set(rows.map((row) => row.gameId))].map(broadcast));
   }
 
-  async function abandon(gameId: string) {
-    if (presence.has(gameId)) return;
-    const [cancelled] = await db
+  /**
+   * Refreshes this instance's presence, then cleans up after every instance:
+   * players whose instance died go offline, and a waiting game nobody has
+   * watched for a while is cancelled, since it would strand whoever joins it.
+   */
+  async function sweep() {
+    if (connections.size) {
+      await db
+        .update(presence)
+        .set({ seenAt: sql`now()` })
+        .where(inArray(presence.id, [...connections]));
+    }
+    const lost = await db
+      .update(presence)
+      .set({ leftAt: sql`${presence.seenAt}` })
+      .where(and(isNull(presence.leftAt), lt(presence.seenAt, ago(staleMs))))
+      .returning({ gameId: presence.gameId });
+    const abandoned = await db
       .update(gameTable)
       .set({ status: "cancelled" })
-      .where(and(eq(gameTable.publicId, gameId), eq(gameTable.status, "waiting")))
-      .returning({ id: gameTable.id });
-    if (cancelled) await broadcast(gameId);
+      .where(
+        and(
+          eq(gameTable.status, "waiting"),
+          lt(gameTable.createdAt, ago(abandonGraceMs)),
+          notExists(
+            db
+              .select()
+              .from(presence)
+              .where(
+                and(
+                  eq(presence.gameId, gameTable.publicId),
+                  or(isNull(presence.leftAt), gt(presence.leftAt, ago(abandonGraceMs))),
+                ),
+              ),
+          ),
+        ),
+      )
+      .returning({ gameId: gameTable.publicId });
+    await db.delete(presence).where(lt(presence.leftAt, ago(abandonGraceMs)));
+    await broadcastAll([...lost, ...abandoned]);
   }
+
+  const heartbeat = setInterval(
+    () => void sweep().catch((error) => console.error("presence sweep failed", error)),
+    heartbeatMs,
+  );
+  heartbeat.unref();
 
   return {
     view,
@@ -341,15 +448,12 @@ export function createArena({
         return { id: await create(tx, userId, false), joined: false };
       });
       if (joined) await broadcast(id);
-      else if (!presence.has(id)) scheduleAbandon(id);
       return id;
     },
 
     /** Opens a private game that only people with the link can join. */
     async invite(userId: string): Promise<string> {
-      const id = await db.transaction((tx) => create(tx, userId, true));
-      scheduleAbandon(id);
-      return id;
+      return db.transaction((tx) => create(tx, userId, true));
     },
 
     async join(gameId: string, userId: string): Promise<MatchView> {
@@ -464,24 +568,48 @@ export function createArena({
      * `signal` aborts. Players watching count as online.
      */
     async *watch(gameId: string, userId: string | null, signal?: AbortSignal) {
-      const updates = publisher.subscribe(gameId, { signal });
-      const initial = await snapshot(gameId);
-      const player = userId !== null && forViewer(initial, userId).seat !== null;
+      await listener.ready;
+      const updates = publisher.subscribe(gameId, {
+        signal: signal ? AbortSignal.any([signal, closing.signal]) : closing.signal,
+      });
+      watching.set(gameId, (watching.get(gameId) ?? 0) + 1);
+      let connection: string | undefined;
       try {
-        if (player) {
+        const initial = await snapshot(gameId);
+        if (userId !== null && forViewer(initial, userId).seat !== null) {
           // Announce the player as online; this stream receives that update too.
-          connect(gameId, userId);
+          connection = await connect(gameId, userId);
           await broadcast(gameId);
         } else {
           yield forViewer(initial, userId);
         }
         for await (const update of updates) yield forViewer(update, userId);
+      } catch (error) {
+        // Closing ends the stream cleanly, so the client reconnects elsewhere.
+        if (!closing.signal.aborted) throw error;
       } finally {
-        if (player) {
-          disconnect(gameId, userId);
+        const count = watching.get(gameId)! - 1;
+        if (count > 0) watching.set(gameId, count);
+        else watching.delete(gameId);
+        if (connection) {
+          await disconnect([connection]);
           await broadcast(gameId).catch(() => {});
         }
       }
+    },
+
+    sweep,
+
+    /**
+     * Takes this instance out of live play before it shuts down: ends its
+     * streams so clients reconnect to another instance, and marks its players
+     * as gone right away instead of when their presence goes stale.
+     */
+    async close() {
+      closing.abort();
+      clearInterval(heartbeat);
+      listener.stop();
+      await broadcastAll(await disconnect([...connections]));
     },
 
     /** The player's finished games, newest first. */
