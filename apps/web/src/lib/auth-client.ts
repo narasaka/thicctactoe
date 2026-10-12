@@ -1,4 +1,5 @@
-import { anonymousClient } from "better-auth/client/plugins";
+import type { Auth } from "@thicctactoe/auth";
+import { anonymousClient, inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { toast } from "sonner";
 
@@ -6,7 +7,7 @@ import { ENV } from "../env";
 
 export const authClient = createAuthClient({
   baseURL: ENV.VITE_SERVER_URL,
-  plugins: [anonymousClient()],
+  plugins: [anonymousClient(), inferAdditionalFields<Auth>()],
 });
 
 export type Provider = "google" | "github";

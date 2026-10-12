@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import { Toaster } from "@thicctactoe/ui/components/sonner";
 
+import Onboarding from "@/components/onboarding";
 import type { orpc } from "@/utils/orpc";
 
 import appCss from "../index.css?url";
@@ -35,6 +36,7 @@ function RootDocument() {
       </head>
       <body>
         <Outlet />
+        <Onboarding />
         <Toaster richColors />
         <Scripts />
       </body>

@@ -57,6 +57,7 @@
         "@tanstack/react-router-ssr-query": "^1.167.2",
         "@tanstack/react-start": "^1.168.49",
         "@thicctactoe/api": "workspace:*",
+        "@thicctactoe/auth": "workspace:*",
         "@thicctactoe/game": "workspace:*",
         "@thicctactoe/ui": "workspace:*",
         "better-auth": "catalog:",

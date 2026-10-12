@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "3391f965-21b7-4385-8fb1-b7f5fc6803ea",
+  "id": "1aa76058-8b98-4e9c-8375-acf5fb389d5f",
   "prevIds": ["59d3f090-1649-4342-bdf0-5cd5a4fd2ce7"],
   "ddl": [
     {
@@ -404,6 +404,19 @@
       "table": "user"
     },
     {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "onboarded",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -681,19 +694,6 @@
       "generated": null,
       "identity": null,
       "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "game"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "started_at",
       "entityType": "columns",
       "schema": "public",
       "table": "game"
