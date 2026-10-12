@@ -40,12 +40,14 @@
     "db:migrate": "turbo run db:migrate -F @thicctactoe/db --",
     "auth:generate": "cd apps/server && bun run auth:generate",
     "check": "oxlint && oxfmt --write",
-    "db:migrate:production": "turbo run db:migrate:production -F @thicctactoe/db --"
+    "db:migrate:production": "turbo run db:migrate:production -F @thicctactoe/db --",
+    "env:encrypt": "bun scripts/env-encrypt.ts"
   },
   "dependencies": {
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@dotenvx/dotenvx": "^2.34.2",
     "@thicctactoe/config": "workspace:*",
     "@types/bun": "catalog:",
     "oxfmt": "^0.66.0",
