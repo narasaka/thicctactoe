@@ -5,7 +5,9 @@
   --breakpoint-wide: 70rem;
 }
 
-/* A scrollbar appearing or disappearing must never shift the page sideways. */
+/* A scrollbar appearing or disappearing must never shift the page sideways.
+   The reserved gutter shows the root background, so it must match the pages. */
 html {
   scrollbar-gutter: stable;
+  @apply bg-neutral-100;
 }
