@@ -15,7 +15,19 @@ export default defineRailway(() => {
     build: {
       builder: "RAILPACK",
       buildCommand: "bunx turbo run build --filter=server",
-      watchPatterns: ["/apps/server/**", "/packages/**", "/bun.lock", "/package.json"],
+      // Only the server and the workspace packages it depends on; frontend-only
+      // changes (apps/web, packages/ui) don't redeploy the API.
+      watchPatterns: [
+        "/apps/server/**",
+        "/packages/api/**",
+        "/packages/auth/**",
+        "/packages/config/**",
+        "/packages/db/**",
+        "/packages/game/**",
+        "/bun.lock",
+        "/package.json",
+        "/turbo.json",
+      ],
     },
     preDeploy: "cd packages/db && bun run db:migrate:production",
     start: "cd apps/server && bun run start",
