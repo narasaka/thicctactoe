@@ -44,6 +44,10 @@ export type MatchView = {
   winner: Player | null;
   endReason: "line" | "draw" | "resign" | null;
   ratingDelta: Record<Player, number> | null;
+  /** The seat that offered a rematch, while the other has not accepted. */
+  rematchOffer: Player | null;
+  /** Public id of the rematch, once both players agreed to it. */
+  rematchId: string | null;
   startedAt: Date | null;
   finishedAt: Date | null;
 };
@@ -145,6 +149,8 @@ export function createArena({
         winner: row.winner,
         endReason: row.endReason,
         ratingDelta: row.ratingDelta,
+        rematchOffer: row.rematchOffer,
+        rematchId: row.rematchId,
         startedAt: row.startedAt,
         finishedAt: row.finishedAt,
       },
@@ -391,6 +397,47 @@ export function createArena({
           throw new ORPCError("CONFLICT", { message: "This game is not in progress" });
         }
         await finish(tx, row, other(seat), "resign");
+      });
+      await broadcast(gameId);
+      return view(gameId, userId);
+    },
+
+    /**
+     * Offers to play the same opponent again once a game is over, or accepts
+     * their offer. Accepting starts the rematch with colors swapped; watchers
+     * of the finished game learn its id.
+     */
+    async rematch(gameId: string, userId: string): Promise<MatchView> {
+      await db.transaction(async (tx) => {
+        const row = await lock(tx, gameId);
+        const seat = seatOf(row, userId);
+        if (!seat) throw new ORPCError("FORBIDDEN", { message: "You are not playing this game" });
+        if (row.status !== "finished") {
+          throw new ORPCError("CONFLICT", { message: "This game is not over yet" });
+        }
+        if (row.rematchId) return;
+        if (!row.playerX || !row.playerO) {
+          throw new ORPCError("CONFLICT", { message: "Your opponent is no longer around" });
+        }
+        if (row.rematchOffer !== other(seat)) {
+          await tx.update(gameTable).set({ rematchOffer: seat }).where(eq(gameTable.id, row.id));
+          return;
+        }
+        const [next] = await tx
+          .insert(gameTable)
+          .values({
+            status: "active",
+            startedAt: new Date(),
+            private: row.private,
+            createdBy: userId,
+            playerX: row.playerO,
+            playerO: row.playerX,
+          })
+          .returning({ publicId: gameTable.publicId });
+        await tx
+          .update(gameTable)
+          .set({ rematchOffer: null, rematchId: next!.publicId })
+          .where(eq(gameTable.id, row.id));
       });
       await broadcast(gameId);
       return view(gameId, userId);

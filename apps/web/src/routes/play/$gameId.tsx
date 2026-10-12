@@ -24,8 +24,16 @@ const COLOR_NAMES = { X: "Green", O: "Purple" } as const;
 /** Long enough to take in the final board before the nudge covers it. */
 const NUDGE_DELAY_MS = 1500;
 
+/** Secondary actions under the board, kept quiet next to the main button. */
+const TEXT_LINK = "text-sm whitespace-nowrap text-neutral-400 underline hover:text-neutral-600";
+
 function MatchPage() {
   const { gameId } = Route.useParams();
+  // A rematch is a new game: start its page from scratch.
+  return <Match key={gameId} gameId={gameId} />;
+}
+
+function Match({ gameId }: { gameId: string }) {
   const session = useGuestSession();
   const match = useMatch(gameId, session?.user.id);
   const { view, game, seat, error, join } = match;
@@ -37,6 +45,7 @@ function MatchPage() {
   }, [joinable, join]);
 
   const nudge = useSignInNudge(view, session?.user.isAnonymous ?? false);
+  useFollowRematch(view);
 
   if (error) {
     return (
@@ -75,6 +84,7 @@ function MatchPage() {
       active={playing && game.turn === player}
       you={seat === player}
       delta={view.ratingDelta?.[player]}
+      callout={view.rematchOffer === player ? "Rematch?" : undefined}
     />
   );
 
@@ -91,7 +101,14 @@ function MatchPage() {
         seats={seat ? [seat] : []}
         locked={!playing}
         onMove={(move) => match.move.mutate(move)}
-        status={<Status view={view} turn={game.turn} resign={() => match.resign.mutate()} />}
+        status={
+          <Status
+            view={view}
+            turn={game.turn}
+            resign={() => match.resign.mutate()}
+            rematch={() => match.rematch.mutate()}
+          />
+        }
       />
       {seat && view.players[seat] && (
         <SignInNudge
@@ -126,10 +143,35 @@ function useSignInNudge(view: MatchView | null, guest: boolean) {
 }
 
 /**
+ * Moves everyone watching on to the rematch as soon as it is agreed. Opening
+ * an old game whose rematch was played long ago stays put.
+ */
+function useFollowRematch(view: MatchView | null) {
+  const navigate = useNavigate();
+  const [watched, setWatched] = useState(false);
+  if (view?.status === "finished" && view.rematchId === null && !watched) setWatched(true);
+  const next = watched ? view?.rematchId : null;
+
+  useEffect(() => {
+    if (next) void navigate({ to: "/play/$gameId", params: { gameId: next } });
+  }, [next, navigate]);
+}
+
+/**
  * Two fixed rows inside the board's fixed-height status area, so switching
  * between turn, resign confirmation and result never moves anything.
  */
-function Status({ view, turn, resign }: { view: MatchView; turn: Player; resign: () => void }) {
+function Status({
+  view,
+  turn,
+  resign,
+  rematch,
+}: {
+  view: MatchView;
+  turn: Player;
+  resign: () => void;
+  rematch: () => void;
+}) {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
   const { seat } = view;
@@ -160,19 +202,22 @@ function Status({ view, turn, resign }: { view: MatchView; turn: Player; resign:
             </span>
           )}
         </div>
-        <div className="flex h-10 gap-2">
+        <div className="flex h-10 items-center gap-3 sm:gap-4">
+          <RematchAction view={view} rematch={rematch} />
           {seat && (
-            <Button onClick={playAgain}>{view.private ? "New invite" : "Play again"}</Button>
+            <button className={TEXT_LINK} onClick={playAgain}>
+              New game
+            </button>
           )}
           <Link
             to="/history/$gameId"
             params={{ gameId: view.id }}
             search={{ move: 0 }}
-            className={buttonClass({ intent: "secondary" })}
+            className={TEXT_LINK}
           >
             Replay
           </Link>
-          <Link to="/leaderboard" className={buttonClass({ intent: "secondary" })}>
+          <Link to="/leaderboard" className={TEXT_LINK}>
             Leaderboard
           </Link>
         </div>
@@ -204,15 +249,43 @@ function Status({ view, turn, resign }: { view: MatchView; turn: Player; resign:
             </Button>
           </>
         ) : (
-          <button
-            className="text-sm text-neutral-400 underline hover:text-neutral-600"
-            onClick={() => setConfirming(true)}
-          >
+          <button className={TEXT_LINK} onClick={() => setConfirming(true)}>
             Resign
           </button>
         )}
       </div>
     </>
+  );
+}
+
+/** Offer a rematch, accept one, or follow it once agreed. */
+function RematchAction({ view, rematch }: { view: MatchView; rematch: () => void }) {
+  if (view.rematchId) {
+    return (
+      <Link to="/play/$gameId" params={{ gameId: view.rematchId }} className={buttonClass()}>
+        {view.seat ? "Go to rematch" : "Watch rematch"}
+      </Link>
+    );
+  }
+  if (!view.seat) return null;
+  if (view.rematchOffer === view.seat) {
+    return (
+      <span className="flex items-center gap-2 whitespace-nowrap text-gray-600">
+        <Loader2 className="size-4 animate-spin" />
+        Rematch sent
+      </span>
+    );
+  }
+  return (
+    <Button onClick={rematch} className="whitespace-nowrap max-sm:px-3 max-sm:text-sm">
+      {view.rematchOffer ? (
+        <>
+          Accept<span className="max-sm:hidden"> rematch</span>
+        </>
+      ) : (
+        "Rematch"
+      )}
+    </Button>
   );
 }
 

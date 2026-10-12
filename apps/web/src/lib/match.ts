@@ -60,6 +60,11 @@ export function useMatch(gameId: string, userId: string | undefined) {
     onSuccess: apply,
     onError,
   });
+  const rematch = useMutation({
+    mutationFn: () => client.arena.rematch({ id: gameId }),
+    onSuccess: apply,
+    onError,
+  });
   const cancel = useMutation({
     mutationFn: () => client.arena.cancel({ id: gameId }),
     onSuccess: apply,
@@ -73,5 +78,5 @@ export function useMatch(gameId: string, userId: string | undefined) {
     return optimistic.ok ? optimistic.game : confirmed;
   }, [view?.moves, pending]);
 
-  return { view, game, seat, error, join, move, resign, cancel };
+  return { view, game, seat, error, join, move, resign, rematch, cancel };
 }

@@ -133,6 +133,35 @@ describe("moves", () => {
   });
 });
 
+describe("rematch", () => {
+  test("starts once both players agree, with colors swapped", async () => {
+    const { id, X, O } = await startGame();
+    await expect(arena.rematch(id, X)).rejects.toThrow("not over yet");
+    await arena.resign(id, O);
+
+    const offered = await arena.rematch(id, X);
+    expect(offered).toMatchObject({ rematchOffer: "X", rematchId: null });
+    // Offering again changes nothing; only the opponent can accept.
+    expect(await arena.rematch(id, X)).toMatchObject({ rematchOffer: "X", rematchId: null });
+
+    const accepted = await arena.rematch(id, O);
+    expect(accepted.rematchOffer).toBeNull();
+    const next = await arena.view(accepted.rematchId!, X);
+    expect(next).toMatchObject({ status: "active", private: true, seat: "O", moves: [] });
+    expect(next.startedAt).not.toBeNull();
+    expect((await arena.view(next.id, O)).seat).toBe("X");
+    // A late click joins the same rematch rather than starting another.
+    expect((await arena.rematch(id, X)).rematchId).toBe(next.id);
+  });
+
+  test("only the players can ask for one", async () => {
+    const { id, O } = await startGame();
+    await arena.resign(id, O);
+    const late = await addUser("late");
+    await expect(arena.rematch(id, late)).rejects.toThrow("not playing");
+  });
+});
+
 describe("move log", () => {
   test("every move is logged with the time the server accepted it", async () => {
     const before = new Date();

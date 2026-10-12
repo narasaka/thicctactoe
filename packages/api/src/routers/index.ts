@@ -28,6 +28,9 @@ export const appRouter = {
     resign: protectedProcedure
       .input(gameInput)
       .handler(({ context, input }) => context.arena.resign(input.id, context.session.user.id)),
+    rematch: protectedProcedure
+      .input(gameInput)
+      .handler(({ context, input }) => context.arena.rematch(input.id, context.session.user.id)),
     cancel: protectedProcedure
       .input(gameInput)
       .handler(({ context, input }) => context.arena.cancel(input.id, context.session.user.id)),
