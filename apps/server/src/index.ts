@@ -10,7 +10,7 @@ import { logger } from "hono/logger";
 
 import { createContext } from "./context";
 import { ENV } from "./env.server";
-import { auth } from "./services";
+import { auth, avatars } from "./services";
 
 const app = new Hono();
 
@@ -26,6 +26,8 @@ app.use(
 );
 
 app.on(["POST", "GET"], "/api/auth/*", async (c) => auth.handler(c.req.raw));
+
+app.get("/avatars/:file", async (c) => (await avatars.serve(c.req.param("file"))) ?? c.notFound());
 
 export const apiHandler = new OpenAPIHandler(appRouter, {
   plugins: [

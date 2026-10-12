@@ -1,7 +1,8 @@
 import type { Session } from "@thicctactoe/auth";
-import type { Database } from "@thicctactoe/db";
+
+import type { Arena } from "./arena";
 
 export type Context = {
   session: Session | null;
-  db: Database;
+  arena: Arena;
 };

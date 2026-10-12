@@ -7,7 +7,8 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "check-types": "tsc -b"
+    "check-types": "tsc -b",
+    "test": "bun test"
   },
   "dependencies": {
     "@orpc/client": "catalog:",
@@ -16,10 +17,14 @@
     "@orpc/zod": "catalog:",
     "@thicctactoe/auth": "workspace:*",
     "@thicctactoe/db": "workspace:*",
+    "@thicctactoe/game": "workspace:*",
+    "drizzle-orm": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@thicctactoe/config": "workspace:*",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.0",
     "typescript": "catalog:"
   }
 }
