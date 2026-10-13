@@ -1,7 +1,10 @@
-import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { type Game, type Move, type Player, PLAYERS, piecesLeft, play } from "@thicctactoe/game";
 import { cn } from "@thicctactoe/ui/lib/utils";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+
+import { playSound, playSounds } from "@/lib/audio";
+import { moveSounds } from "@/lib/sounds";
 
 import Cell from "./cell";
 import PieceTray from "./piece-tray";
@@ -53,11 +56,24 @@ export default function GameBoard({
   const line: readonly number[] = game.outcome.status === "won" ? game.outcome.line : [];
   const last = markLastMove ? game.moves.at(-1)?.cell : undefined;
 
+  // Every move sounds, whoever made it: yours as you drop it, the
+  // opponent's as it arrives, a replay's as it steps forward.
+  const previous = useRef(game);
+  useEffect(() => {
+    if (game === previous.current) return;
+    playSounds(moveSounds(previous.current, game, seats));
+    previous.current = game;
+  });
+
+  const handleDragStart = ({ active }: DragStartEvent) =>
+    playSound({ type: "pickup", size: parseSlotId(String(active.id)).size });
+
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
     if (over === null) return;
     const slot = parseSlotId(String(active.id));
     const move = { player: slot.player, size: slot.size, cell: Number(over.id) };
-    if (!canMove(move.player) || !play(game, move).ok) return;
+    if (!canMove(move.player)) return;
+    if (!play(game, move).ok) return playSound({ type: "nope" });
     setPlayed((prev) => [...prev, slot]);
     onMove(move);
   };
@@ -77,7 +93,7 @@ export default function GameBoard({
 
   return (
     // Auto-scroll is off: a drag must never move the page under the player.
-    <DndContext onDragEnd={handleDragEnd} autoScroll={false}>
+    <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} autoScroll={false}>
       <div
         className={cn(
           "grid h-full content-center items-center justify-items-center gap-x-8 gap-y-3",

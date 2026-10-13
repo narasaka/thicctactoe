@@ -2,16 +2,18 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { Player } from "@thicctactoe/game";
 import { cn } from "@thicctactoe/ui/lib/utils";
 import { Loader2 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import GameBoard from "@/components/board/game-board";
 import Button, { buttonClass } from "@/components/button";
 import GameOverDialog, { GameOverActions, gameResult } from "@/components/game-over";
 import Layout from "@/components/layout";
 import PlayerCard, { piecesUsed } from "@/components/player-card";
+import { playSound } from "@/lib/audio";
 import { useMatch } from "@/lib/match";
 import type { MatchView } from "@/lib/match-view";
 import { useGuestSession } from "@/lib/session";
+import { matchSound } from "@/lib/sounds";
 
 export const Route = createFileRoute("/play/$gameId")({
   ssr: false,
@@ -43,6 +45,7 @@ function Match({ gameId }: { gameId: string }) {
 
   const gameOver = useGameOverDialog(view);
   useFollowRematch(view);
+  useMatchSounds(view);
 
   if (error) {
     return (
@@ -147,6 +150,17 @@ function useFollowRematch(view: MatchView | null) {
   useEffect(() => {
     if (next) void navigate({ to: "/play/$gameId", params: { gameId: next } });
   }, [next, navigate]);
+}
+
+/** Sounds for what the board does not show: an opponent arriving, or a resignation. */
+function useMatchSounds(view: MatchView | null) {
+  const previous = useRef(view);
+  useEffect(() => {
+    if (view === previous.current) return;
+    const sound = previous.current && view && matchSound(previous.current, view);
+    if (sound) playSound(sound);
+    previous.current = view;
+  });
 }
 
 /**
