@@ -2,6 +2,7 @@ import { Link, useLocation } from "@tanstack/react-router";
 import { cn } from "@thicctactoe/ui/lib/utils";
 import type { ReactNode } from "react";
 
+import SoundToggle from "./sound-toggle";
 import UserBadge from "./user-badge";
 
 export default function Layout({
@@ -31,7 +32,10 @@ export default function Layout({
             ThiccTacToe
           </Link>
         )}
-        <UserBadge />
+        <div className="flex items-center gap-2">
+          <SoundToggle />
+          <UserBadge />
+        </div>
       </header>
       <div className={cn(fit && "max-md:min-h-0", className)}>{children}</div>
       <footer
