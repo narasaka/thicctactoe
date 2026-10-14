@@ -16,11 +16,11 @@ function HomePage() {
       <h2 className="text-center text-gray-500 sm:text-lg">a twist on the classic TicTacToe</h2>
       <div className="p-2" />
       <div className="flex flex-col gap-2 px-8 md:flex-row md:justify-center">
-        <Link to="/game" className={buttonClass({ className: "text-center" })}>
-          Play local
-        </Link>
-        <Link to="/play" className={buttonClass({ intent: "secondary", className: "text-center" })}>
+        <Link to="/play" className={buttonClass({ className: "text-center" })}>
           Play online
+        </Link>
+        <Link to="/game" className={buttonClass({ intent: "secondary", className: "text-center" })}>
+          Play local
         </Link>
       </div>
       <div className="mt-2 text-center">
