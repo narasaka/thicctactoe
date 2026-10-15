@@ -37,7 +37,7 @@ function LocalGamePage() {
             <div className="text-gray-500">{PLAYER_NAMES[game.turn]}&apos;s turn</div>
           ) : (
             <>
-              <div className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
+              <div className="text-center text-3xl font-pixel sm:text-4xl">
                 {outcome.status === "won" ? `${PLAYER_NAMES[outcome.winner]} wins` : "It's a tie!"}
               </div>
               <Button onClick={restart}>Play again</Button>

@@ -197,9 +197,7 @@ function Result({ view, name }: { view: MatchView; name: (player: Player) => str
           : "You lost";
   return (
     <>
-      <span className="text-3xl font-extrabold tracking-tight whitespace-nowrap sm:text-4xl">
-        {headline}
-      </span>
+      <span className="text-3xl font-pixel whitespace-nowrap sm:text-4xl">{headline}</span>
       {view.endReason === "resign" && winner && (
         <span className="truncate text-sm text-gray-500">{name(other(winner))} resigned</span>
       )}
@@ -368,7 +366,7 @@ function MoveList({
 function Message({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <Layout className="container flex flex-col items-center gap-4 text-center">
-      <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">{title}</h1>
+      <h1 className="text-4xl font-pixel sm:text-5xl">{title}</h1>
       {children}
     </Layout>
   );

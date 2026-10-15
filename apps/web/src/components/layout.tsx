@@ -28,7 +28,7 @@ export default function Layout({
         {home ? (
           <span />
         ) : (
-          <Link to="/" className="font-extrabold tracking-tight text-neutral-800">
+          <Link to="/" className="font-pixel text-xl text-neutral-800">
             ThiccTacToe
           </Link>
         )}

@@ -51,7 +51,7 @@ function ProfilePage() {
   if (isError) {
     return (
       <Layout className="container flex flex-col items-center gap-4 text-center">
-        <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">Player not found</h1>
+        <h1 className="text-4xl font-pixel sm:text-5xl">Player not found</h1>
         <Link to="/leaderboard" className={buttonClass()}>
           Leaderboard
         </Link>
@@ -107,9 +107,7 @@ function Header({ profile, you }: { profile: Profile; you: boolean }) {
     <div className="flex items-center gap-4">
       <Avatar name={profile.name} image={profile.image} className="size-16 text-2xl" />
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-3xl font-extrabold tracking-tight sm:text-4xl">
-          {profile.name}
-        </h1>
+        <h1 className="truncate text-3xl font-pixel sm:text-4xl">{profile.name}</h1>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-500">
           {you && <Tag>You</Tag>}
           {profile.anonymous && <Tag>Guest</Tag>}

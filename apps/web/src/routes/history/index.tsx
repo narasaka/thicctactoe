@@ -24,7 +24,7 @@ function HistoryPage() {
         <Loader2 className="animate-spin text-neutral-400" />
       ) : (
         <>
-          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">No games yet</h1>
+          <h1 className="text-4xl font-pixel sm:text-5xl">No games yet</h1>
           <Link to="/play" className={buttonClass()}>
             Play online
           </Link>

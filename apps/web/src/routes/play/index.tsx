@@ -29,7 +29,7 @@ function LobbyPage() {
 
   return (
     <Layout className="container max-w-md text-center">
-      <h1 className="text-5xl font-extrabold tracking-tight sm:text-6xl">Play online</h1>
+      <h1 className="text-5xl font-pixel sm:text-6xl">Play online</h1>
       {/* Reserved height: the text depends on the session, which loads after first paint. */}
       <p className="mt-2 min-h-18 text-gray-500">
         {session &&

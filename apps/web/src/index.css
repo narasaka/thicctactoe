@@ -1,8 +1,23 @@
 @import "@thicctactoe/ui/globals.css";
 
+@font-face {
+  font-family: "Geist Pixel";
+  src: url("/fonts/GeistPixel-Square.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
 @theme {
   /* Wide enough for the board with a piece tray on each side. */
   --breakpoint-wide: 70rem;
+}
+
+/* Display type: titles, headings and buttons. The font has a single, fairly light weight:
+   an outline in the text colour thickens it evenly and keeps the pixels square.
+   Never pair it with a bold class, which would smear it with a synthesized bold. */
+@utility font-pixel {
+  font-family: "Geist Pixel", ui-monospace, monospace;
+  -webkit-text-stroke: 0.025em currentColor;
 }
 
 /* Screens too short for dialogs at full size, e.g. small phones with browser bars. */

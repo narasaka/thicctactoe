@@ -2,7 +2,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 
 export const buttonClass = cva(
-  "rounded-lg px-4 py-2 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60",
+  "rounded-lg px-4 py-2 font-pixel transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60",
   {
     variants: {
       intent: {

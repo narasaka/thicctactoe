@@ -187,9 +187,7 @@ function Status({
     return (
       <>
         <div className="flex h-10 items-baseline gap-2">
-          <span className="text-2xl font-extrabold tracking-tight whitespace-nowrap">
-            {headline}
-          </span>
+          <span className="text-2xl font-pixel whitespace-nowrap">{headline}</span>
           <span className="truncate text-sm text-gray-500">{reason}</span>
         </div>
         <GameOverActions view={view} rematch={rematch} variant="inline" />
@@ -267,7 +265,7 @@ function WaitingRoom({ view, cancel }: { view: MatchView; cancel: () => void }) 
 function Message({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <Layout className="container flex flex-col items-center gap-4 text-center">
-      <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">{title}</h1>
+      <h1 className="text-4xl font-pixel sm:text-5xl">{title}</h1>
       {children}
     </Layout>
   );

@@ -51,7 +51,7 @@ const cellVariants = cva(
   },
 );
 
-const buttonVariants = cva("rounded-lg px-4 py-2 transition-all duration-200", {
+const buttonVariants = cva("rounded-lg px-4 py-2 font-pixel transition-all duration-200", {
   variants: {
     intent: {
       primary: "bg-neutral-800 text-white hover:bg-neutral-700 active:bg-neutral-600",
@@ -143,7 +143,7 @@ function TutorialCell({ id, children, highlight, disabled }: TutorialCellProps) 
 function Step1Content() {
   return (
     <div className="flex flex-col items-center gap-6">
-      <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Your Pieces</h2>
+      <h2 className="text-3xl font-pixel sm:text-4xl">Your Pieces</h2>
       <p className="min-h-18 max-w-sm text-center text-neutral-600">
         You have <span className="font-bold">3 sizes</span> of pieces. More sides means bigger:
         triangle (3) &lt; square (4) &lt; pentagon (5).
@@ -197,7 +197,7 @@ function Step2Content({ onComplete, completed }: InteractiveStepProps) {
   return (
     <DndContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col items-center gap-6">
-        <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Place a Piece</h2>
+        <h2 className="text-3xl font-pixel sm:text-4xl">Place a Piece</h2>
         <p className="min-h-18 max-w-sm text-center text-neutral-600">
           Drag a piece onto the board to claim a cell.
         </p>
@@ -261,7 +261,7 @@ function Step3Content({ onComplete, completed }: InteractiveStepProps) {
   return (
     <DndContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col items-center gap-6">
-        <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Gobble!</h2>
+        <h2 className="text-3xl font-pixel sm:text-4xl">Gobble!</h2>
         <p className="min-h-18 max-w-sm text-center text-neutral-600">
           A <span className="font-bold">larger</span> piece can cover a smaller one. Try gobbling
           the opponent&apos;s piece!
@@ -330,7 +330,7 @@ function Step4Content({ onComplete, completed }: InteractiveStepProps) {
   return (
     <DndContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col items-center gap-6">
-        <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Three in a Row</h2>
+        <h2 className="text-3xl font-pixel sm:text-4xl">Three in a Row</h2>
         <p className="min-h-18 max-w-sm text-center text-neutral-600">
           Get three of your <span className="font-bold">visible</span> pieces in a line — row,
           column, or diagonal. Complete the top row.
@@ -381,7 +381,7 @@ function Step4Content({ onComplete, completed }: InteractiveStepProps) {
 function Step5Content() {
   return (
     <div className="flex flex-col items-center gap-6">
-      <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">You&apos;re Ready!</h2>
+      <h2 className="text-3xl font-pixel sm:text-4xl">You&apos;re Ready!</h2>
       <p className="min-h-18 max-w-sm text-center text-neutral-600">
         You know everything you need. Time to play!
       </p>
@@ -415,7 +415,7 @@ function Step5Content() {
         to="/game"
         className={buttonVariants({
           intent: "primary",
-          className: "mt-2 px-8 py-3 text-lg font-semibold",
+          className: "mt-2 px-8 py-3 text-lg",
         })}
       >
         Start Playing!

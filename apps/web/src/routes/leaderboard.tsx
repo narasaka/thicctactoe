@@ -21,9 +21,7 @@ function LeaderboardPage() {
 
   return (
     <Layout className="container max-w-2xl">
-      <h1 className="text-center text-5xl font-extrabold tracking-tight sm:text-6xl">
-        Leaderboard
-      </h1>
+      <h1 className="text-center text-5xl font-pixel sm:text-6xl">Leaderboard</h1>
       <p className="mt-2 text-center text-gray-500">Signed-in players, ranked by rating.</p>
       <div className="mt-6 overflow-hidden rounded-xl bg-white shadow-sm">
         {players.length === 0 ? (

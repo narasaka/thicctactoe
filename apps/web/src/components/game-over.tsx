@@ -79,7 +79,7 @@ export function GameOverActions({
       <RematchAction
         view={view}
         rematch={rematch}
-        className={inline ? "px-3 text-sm" : "py-3 text-lg font-semibold short:py-2"}
+        className={inline ? "px-3 text-sm" : "py-3 text-lg short:py-2"}
       />
       <div className={cn(inline ? "contents" : "grid grid-cols-2 gap-2")}>
         {view.seat ? (
@@ -166,10 +166,7 @@ export default function GameOverDialog({
         <div className="relative bg-neutral-900 px-12 pt-6 pb-5 text-center short:pt-4 short:pb-3">
           {/* Spectators read a name, not "You", so it gets more room. */}
           <DialogTitle
-            className={cn(
-              "font-extrabold tracking-tight text-balance text-white",
-              seat ? "text-3xl" : "text-2xl",
-            )}
+            className={cn("font-pixel text-balance text-white", seat ? "text-3xl" : "text-2xl")}
           >
             {headline}
           </DialogTitle>
