@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,10 +20,13 @@ export default function UserBadge() {
   const navigate = useNavigate();
   const { data: session, isPending } = authClient.useSession();
   const [renaming, setRenaming] = useState(false);
+  const pathname = useLocation({ select: (location) => location.pathname });
   if (isPending) return null;
 
   const user = session?.user;
   const guest = !user || user.isAnonymous;
+  // Signing in replaces the guest, whose profile goes with it; /history finds the new one.
+  const returnTo = user && pathname === `/players/${user.publicId}` ? "/history" : undefined;
   const profile = user && (
     <DropdownMenuItem
       onClick={() =>
@@ -51,7 +54,7 @@ export default function UserBadge() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {PROVIDERS.map(({ id, name }) => (
-                <DropdownMenuItem key={id} onClick={() => signInWith(id)}>
+                <DropdownMenuItem key={id} onClick={() => signInWith(id, returnTo)}>
                   <ProviderIcon provider={id} />
                   Sign in with {name}
                 </DropdownMenuItem>
