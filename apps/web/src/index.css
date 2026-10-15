@@ -28,6 +28,9 @@
 html {
   scrollbar-gutter: stable;
   @apply bg-neutral-100;
+  /* Tapping a piece then a cell in quick succession must never zoom the page.
+     This only turns off double-tap zoom: pinch zoom still works. */
+  touch-action: manipulation;
 }
 
 @theme {

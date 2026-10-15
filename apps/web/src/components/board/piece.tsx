@@ -98,12 +98,26 @@ export function PieceBadge({
   );
 }
 
+const SELECTED_RING = {
+  X: "ring-4 ring-emerald-600 ring-offset-2 ring-offset-neutral-100",
+  O: "ring-4 ring-indigo-600 ring-offset-2 ring-offset-neutral-100",
+} as const;
+
+/** A tray piece the player can drag onto the board, or tap to pick up and then tap a cell. */
 export function DraggablePiece({
   id,
   disabled,
+  selected,
+  onSelect,
   className,
   ...pieceProps
-}: PieceProps & { id: string; disabled: boolean; className?: string }) {
+}: PieceProps & {
+  id: string;
+  disabled: boolean;
+  selected: boolean;
+  onSelect: () => void;
+  className?: string;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id,
     disabled,
@@ -112,15 +126,17 @@ export function DraggablePiece({
     <button
       ref={setNodeRef}
       type="button"
-      data-slot={id}
+      data-piece={id}
       // Pieces in a stack overlap: the one in hand goes over its neighbours.
-      className={cn(className, isDragging && "relative z-10")}
+      className={cn(className, (isDragging || selected) && "relative z-10")}
+      onClick={onSelect}
       {...listeners}
       {...attributes}
     >
       <PieceView
         {...pieceProps}
         disabled={disabled}
+        className={cn(selected && SELECTED_RING[pieceProps.player])}
         style={transform ? { transform: CSS.Translate.toString(transform) } : undefined}
       />
     </button>
