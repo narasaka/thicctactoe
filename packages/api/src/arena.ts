@@ -8,7 +8,21 @@ import {
   user,
 } from "@thicctactoe/db/schema/index";
 import { type Move, type Player, other, play, replay } from "@thicctactoe/game";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, notExists, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { PoolClient } from "pg";
 
 import { ratingChange } from "./rating";
@@ -27,6 +41,8 @@ export type { LoggedMove };
 export type Arena = ReturnType<typeof createArena>;
 
 export type PlayerView = {
+  /** Public id, as used in profile links. */
+  id: string;
   name: string;
   image: string | null;
   anonymous: boolean;
@@ -62,7 +78,7 @@ export type HistoryEntry = {
   private: boolean;
   seat: Player;
   /** Null if the opponent's account has since been deleted. */
-  opponent: Pick<PlayerView, "name" | "image" | "anonymous"> | null;
+  opponent: Pick<PlayerView, "id" | "name" | "image" | "anonymous"> | null;
   result: "win" | "loss" | "draw";
   endReason: "line" | "draw" | "resign";
   ratingDelta: number | null;
@@ -78,9 +94,34 @@ export type HistoryPage = {
 
 export type LeaderboardEntry = {
   rank: number;
+  /** Public id, as used in profile links. */
+  id: string;
   name: string;
   image: string | null;
   rating: number;
+};
+
+/** Where a player's rating stood at a point in time. */
+export type RatingPoint = { at: Date; rating: number };
+
+export type Profile = {
+  /** Public id, as used in profile links. */
+  id: string;
+  name: string;
+  image: string | null;
+  anonymous: boolean;
+  joinedAt: Date;
+  rating: number;
+  /** Place on the leaderboard; null for guests and players yet to finish a game. */
+  rank: number | null;
+  wins: number;
+  losses: number;
+  draws: number;
+  /**
+   * The rating before the first game shown, then after every game since,
+   * oldest first. Empty until the player finishes a game.
+   */
+  ratings: RatingPoint[];
 };
 
 type GameRow = typeof gameTable.$inferSelect;
@@ -90,6 +131,9 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 /** Postgres channel carrying the public ids of games that changed. */
 const CHANNEL = "arena";
+
+/** How many of a player's most recent games their rating trend covers. */
+const RATING_POINTS = 500;
 
 export type ArenaOptions = {
   db: Database;
@@ -121,6 +165,16 @@ export function createArena({
 
   const ago = (ms: number) => sql`now() - make_interval(secs => ${ms / 1000})`;
   const fresh = and(isNull(presence.leftAt), gt(presence.seenAt, ago(staleMs)));
+  /** Who shows up on the leaderboard: signed-in players who have finished a game. */
+  const ranked = and(
+    eq(user.isAnonymous, false),
+    gt(sql`${playerStats.wins} + ${playerStats.losses} + ${playerStats.draws}`, 0),
+  );
+  const finishedBy = (userId: string) =>
+    and(
+      eq(gameTable.status, "finished"),
+      or(eq(gameTable.playerX, userId), eq(gameTable.playerO, userId)),
+    );
 
   async function snapshot(gameId: string): Promise<Snapshot> {
     const row = await db.query.game.findFirst({ where: { publicId: gameId } });
@@ -132,6 +186,7 @@ export function createArena({
           db
             .select({
               id: user.id,
+              publicId: user.publicId,
               name: user.name,
               image: user.image,
               anonymous: user.isAnonymous,
@@ -150,6 +205,7 @@ export function createArena({
       const found = players.find((p) => p.id === userId);
       if (!found) return null;
       return {
+        id: found.publicId,
         name: found.name,
         image: found.image,
         anonymous: found.anonymous ?? false,
@@ -399,6 +455,60 @@ export function createArena({
     await broadcastAll([...lost, ...abandoned]);
   }
 
+  /** The internal id of the player with this public id. */
+  async function userIdOf(playerId: string) {
+    const [found] = await db.select({ id: user.id }).from(user).where(eq(user.publicId, playerId));
+    if (!found) throw new ORPCError("NOT_FOUND", { message: "Player not found" });
+    return found.id;
+  }
+
+  /** Where a ranked player with this record places, breaking ties like the leaderboard. */
+  async function rankOf(rating: number, wins: number, joinedAt: Date) {
+    const [ahead] = await db
+      .select({ count: count() })
+      .from(playerStats)
+      .innerJoin(user, eq(user.id, playerStats.userId))
+      .where(
+        and(
+          ranked,
+          or(
+            gt(playerStats.rating, rating),
+            and(eq(playerStats.rating, rating), gt(playerStats.wins, wins)),
+            and(
+              eq(playerStats.rating, rating),
+              eq(playerStats.wins, wins),
+              lt(user.createdAt, joinedAt),
+            ),
+          ),
+        ),
+      );
+    return ahead!.count + 1;
+  }
+
+  /** Walks back from the current rating through the player's recent games. */
+  async function ratingsOf(userId: string, current: number): Promise<RatingPoint[]> {
+    const seat = sql`case when ${gameTable.playerX} = ${userId} then 'X' else 'O' end`;
+    const rows = await db
+      .select({
+        startedAt: gameTable.startedAt,
+        finishedAt: gameTable.finishedAt,
+        delta: sql<number>`coalesce((${gameTable.ratingDelta} ->> ${seat})::int, 0)`,
+      })
+      .from(gameTable)
+      .where(finishedBy(userId))
+      .orderBy(desc(gameTable.finishedAt), desc(gameTable.id))
+      .limit(RATING_POINTS);
+    let rating = current;
+    const points = rows.map((row) => {
+      const point = { at: row.finishedAt!, rating };
+      rating -= row.delta;
+      return point;
+    });
+    const first = rows.at(-1);
+    if (first) points.push({ at: first.startedAt ?? first.finishedAt!, rating });
+    return points.reverse();
+  }
+
   const heartbeat = setInterval(
     () => void sweep().catch((error) => console.error("presence sweep failed", error)),
     heartbeatMs,
@@ -609,11 +719,57 @@ export function createArena({
       await broadcastAll(await disconnect([...connections]));
     },
 
-    /** The player's finished games, newest first. */
+    /** A player's record and rating trend, by public id. */
+    async profile(playerId: string): Promise<Profile> {
+      const [found] = await db
+        .select({
+          id: user.id,
+          name: user.name,
+          image: user.image,
+          anonymous: user.isAnonymous,
+          createdAt: user.createdAt,
+          rating: playerStats.rating,
+          wins: playerStats.wins,
+          losses: playerStats.losses,
+          draws: playerStats.draws,
+        })
+        .from(user)
+        .leftJoin(playerStats, eq(playerStats.userId, user.id))
+        .where(eq(user.publicId, playerId));
+      if (!found) throw new ORPCError("NOT_FOUND", { message: "Player not found" });
+
+      const rating = found.rating ?? 1000;
+      const wins = found.wins ?? 0;
+      const losses = found.losses ?? 0;
+      const draws = found.draws ?? 0;
+      const anonymous = found.anonymous ?? false;
+      const onBoard = !anonymous && wins + losses + draws > 0;
+      const [rank, ratings] = await Promise.all([
+        onBoard ? rankOf(rating, wins, found.createdAt) : null,
+        ratingsOf(found.id, rating),
+      ]);
+
+      return {
+        id: playerId,
+        name: found.name,
+        image: found.image,
+        anonymous,
+        joinedAt: found.createdAt,
+        rating,
+        rank,
+        wins,
+        losses,
+        draws,
+        ratings,
+      };
+    },
+
+    /** A player's finished games by public id, newest first. */
     async history(
-      userId: string,
+      playerId: string,
       { after, limit = 20 }: { after?: string; limit?: number } = {},
     ): Promise<HistoryPage> {
+      const userId = await userIdOf(playerId);
       // Ordered by (finishedAt, id) so games finished in the same instant still page cleanly.
       const anchor = after
         ? db
@@ -636,8 +792,7 @@ export function createArena({
         .from(gameTable)
         .where(
           and(
-            eq(gameTable.status, "finished"),
-            or(eq(gameTable.playerX, userId), eq(gameTable.playerO, userId)),
+            finishedBy(userId),
             anchor && sql`(${gameTable.finishedAt}, ${gameTable.id}) < (${anchor})`,
           ),
         )
@@ -652,6 +807,7 @@ export function createArena({
         ? await db
             .select({
               id: user.id,
+              publicId: user.publicId,
               name: user.name,
               image: user.image,
               anonymous: user.isAnonymous,
@@ -669,7 +825,12 @@ export function createArena({
           private: row.private,
           seat,
           opponent: opponent
-            ? { name: opponent.name, image: opponent.image, anonymous: opponent.anonymous ?? false }
+            ? {
+                id: opponent.publicId,
+                name: opponent.name,
+                image: opponent.image,
+                anonymous: opponent.anonymous ?? false,
+              }
             : null,
           result: row.winner === null ? "draw" : row.winner === seat ? "win" : "loss",
           endReason: row.endReason!,
@@ -685,18 +846,14 @@ export function createArena({
     async leaderboard(limit = 50): Promise<LeaderboardEntry[]> {
       const rows = await db
         .select({
+          id: user.publicId,
           name: user.name,
           image: user.image,
           rating: playerStats.rating,
         })
         .from(playerStats)
         .innerJoin(user, eq(user.id, playerStats.userId))
-        .where(
-          and(
-            eq(user.isAnonymous, false),
-            gt(sql`${playerStats.wins} + ${playerStats.losses} + ${playerStats.draws}`, 0),
-          ),
-        )
+        .where(ranked)
         .orderBy(desc(playerStats.rating), desc(playerStats.wins), asc(user.createdAt))
         .limit(limit);
       return rows.map((row, index) => ({ rank: index + 1, ...row }));

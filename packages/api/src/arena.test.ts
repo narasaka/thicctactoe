@@ -55,6 +55,10 @@ async function startGame() {
   return seat === "X" ? { id, X: guest, O: host } : { id, X: host, O: guest };
 }
 
+/** The id the player goes by in profile links. */
+const publicIdOf = async (userId: string) =>
+  (await db.query.user.findFirst({ where: { id: userId } }))!.publicId;
+
 const statsOf = async (userId: string) =>
   (await db.query.playerStats.findFirst({ where: { userId } }))!;
 
@@ -202,12 +206,12 @@ describe("history", () => {
     const stranger = await addUser("stranger");
     await arena.join(await arena.invite(stranger), await addUser("friend"));
 
-    const { games, next } = await arena.history(O);
+    const { games, next } = await arena.history(await publicIdOf(O));
     expect(next).toBeNull();
     expect(games).toEqual([
       expect.objectContaining({
         id: resigned,
-        opponent: { name: X, image: null, anonymous: false },
+        opponent: { id: await publicIdOf(X), name: X, image: null, anonymous: false },
         result: "win",
         endReason: "resign",
         moveCount: 0,
@@ -221,7 +225,10 @@ describe("history", () => {
         moveCount: 5,
       }),
     ]);
-    expect((await arena.history(X)).games.map((game) => game.result)).toEqual(["loss", "win"]);
+    expect((await arena.history(await publicIdOf(X))).games.map((game) => game.result)).toEqual([
+      "loss",
+      "win",
+    ]);
   });
 
   test("pages through games with a cursor", async () => {
@@ -237,20 +244,80 @@ describe("history", () => {
     // Games finished in the same instant must neither repeat nor go missing.
     await db.update(gameTable).set({ finishedAt: new Date("2026-01-01") });
 
-    const first = await arena.history(a, { limit: 2 });
+    const player = await publicIdOf(a);
+    const first = await arena.history(player, { limit: 2 });
     expect(first.games).toHaveLength(2);
-    const second = await arena.history(a, { limit: 2, after: first.next! });
+    const second = await arena.history(player, { limit: 2, after: first.next! });
     expect([...first.games, ...second.games].map((game) => game.id).sort()).toEqual(ids.sort());
     expect(second.next).toBeNull();
+  });
+
+  test("is not found for an unknown player", async () => {
+    await expect(arena.history("nobody")).rejects.toThrow("Player not found");
+  });
+});
+
+describe("profile", () => {
+  test("shows a player's record, rank and rating after every game", async () => {
+    const { id: first, X, O } = await startGame();
+    await arena.resign(first, O); // X: 1016
+    const second = await arena.invite(X);
+    await arena.join(second, O);
+    await arena.resign(second, X); // X: 1016 - 17 = 999
+    const third = await arena.invite(X);
+    await arena.join(third, O);
+    await arena.resign(third, O); // X: 999 + 16 = 1015
+
+    const profile = await arena.profile(await publicIdOf(X));
+    expect(profile).toMatchObject({ name: X, anonymous: false, wins: 2, losses: 1, draws: 0 });
+    expect(profile.rating).toBe((await statsOf(X)).rating);
+    expect(profile.ratings.map((point) => point.rating)).toEqual([1000, 1016, 999, profile.rating]);
+    const times = profile.ratings.map((point) => point.at.getTime());
+    expect(times).toEqual(times.toSorted((a, b) => a - b));
+    expect(profile.rank).toBe(1);
+    expect((await arena.profile(await publicIdOf(O))).rank).toBe(2);
+  });
+
+  test("players who never finished a game have no rank or trend", async () => {
+    const idle = await addUser("idle");
+    expect(await arena.profile(await publicIdOf(idle))).toMatchObject({
+      rating: 1000,
+      rank: null,
+      wins: 0,
+      ratings: [],
+    });
+  });
+
+  test("guests are not ranked", async () => {
+    const { id, X, O } = await startGame();
+    await db
+      .update(user)
+      .set({ isAnonymous: true })
+      .where(sql`${user.id} = ${X}`);
+    await arena.resign(id, O);
+    expect(await arena.profile(await publicIdOf(X))).toMatchObject({ anonymous: true, rank: null });
+    expect((await arena.profile(await publicIdOf(O))).rank).toBe(1);
+  });
+
+  test("is not found for an unknown player", async () => {
+    await expect(arena.profile("nobody")).rejects.toThrow("Player not found");
   });
 });
 
 describe("ids", () => {
-  test("games get short public ids; internal user ids never appear in views", async () => {
+  test("games and players get short public ids; internal user ids never appear in views", async () => {
     const { id, X, O } = await startGame();
+    await arena.resign(id, O);
+    const player = await publicIdOf(X);
     expect(id).toMatch(/^[2-9a-km-np-z]{10}$/);
+    expect(player).toMatch(/^[2-9a-km-np-z]{10}$/);
     await db.update(user).set({ name: "Somebody" });
-    const json = JSON.stringify([await arena.view(id, X), await arena.leaderboard()]);
+    const json = JSON.stringify([
+      await arena.view(id, X),
+      await arena.leaderboard(),
+      await arena.profile(player),
+      await arena.history(player),
+    ]);
     expect(json).not.toContain(X);
     expect(json).not.toContain(O);
   });
@@ -274,7 +341,9 @@ describe("leaderboard", () => {
     await addUser("idle");
     await db.insert(playerStats).values({ userId: "idle" });
 
-    expect(await arena.leaderboard()).toEqual([{ rank: 1, name: X, image: null, rating: 1016 }]);
+    expect(await arena.leaderboard()).toEqual([
+      { rank: 1, id: await publicIdOf(X), name: X, image: null, rating: 1016 },
+    ]);
   });
 });
 

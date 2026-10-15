@@ -1,8 +1,12 @@
 import { defineRelationsPart } from "drizzle-orm";
 import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 
+import { publicId } from "../public-id";
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
+  /** The id in profile links. */
+  publicId: text("public_id").notNull().unique().$defaultFn(publicId),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
