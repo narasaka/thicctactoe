@@ -18,18 +18,11 @@ const tile =
 
 function HomePage() {
   return (
-    <Layout className="relative flex w-full flex-col items-center">
-      {/* A faint dot grid behind the menu, fading out toward the edges. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(var(--color-neutral-300)_1px,transparent_1px)] bg-size-[22px_22px] mask-radial-from-20% mask-radial-to-70%"
-      />
-      <DemoBoard className="relative" />
-      <h1 className="relative mt-8 text-center font-pixel text-6xl sm:text-7xl">ThiccTacToe</h1>
-      <p className="relative mt-2 text-center text-gray-500 sm:text-lg">
-        a twist on the classic TicTacToe
-      </p>
-      <nav className="relative mt-8 flex w-full max-w-xs flex-col gap-3">
+    <Layout className="flex w-full flex-col items-center">
+      <DemoBoard />
+      <h1 className="mt-8 text-center font-pixel text-6xl sm:text-7xl">ThiccTacToe</h1>
+      <p className="mt-2 text-center text-gray-500 sm:text-lg">a twist on the classic TicTacToe</p>
+      <nav className="mt-8 flex w-full max-w-xs flex-col gap-3">
         <Link
           to="/play"
           className={buttonClass({
@@ -48,7 +41,7 @@ function HomePage() {
           Play local
         </Link>
       </nav>
-      <div className="relative mt-4 grid w-full max-w-xs grid-cols-3 gap-2">
+      <div className="mt-4 grid w-full max-w-xs grid-cols-3 gap-2">
         <Link to="/tutorial" className={tile}>
           <BookOpen className="size-5" />
           How to play

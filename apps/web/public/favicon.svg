@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <mask id="gap">
+    <rect width="64" height="64" fill="#fff"/>
+    <circle cx="37" cy="25" r="28" fill="#000"/>
+  </mask>
+  <g mask="url(#gap)">
+    <circle cx="19" cy="45" r="17" fill="#818cf8"/>
+    <rect x="13" y="39" width="12" height="12" rx="1.5" fill="#4f46e5"/>
+  </g>
+  <circle cx="37" cy="25" r="25" fill="#34d399"/>
+  <polygon points="37,16 45.56,22.22 42.29,32.28 31.71,32.28 28.44,22.22" fill="#059669" stroke="#059669" stroke-width="2.7" stroke-linejoin="round"/>
+</svg>
