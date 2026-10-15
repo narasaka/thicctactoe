@@ -274,9 +274,7 @@ describe("leaderboard", () => {
     await addUser("idle");
     await db.insert(playerStats).values({ userId: "idle" });
 
-    expect(await arena.leaderboard()).toEqual([
-      expect.objectContaining({ rank: 1, name: X, rating: 1016, wins: 1 }),
-    ]);
+    expect(await arena.leaderboard()).toEqual([{ rank: 1, name: X, image: null, rating: 1016 }]);
   });
 });
 

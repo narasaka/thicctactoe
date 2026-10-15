@@ -81,9 +81,6 @@ export type LeaderboardEntry = {
   name: string;
   image: string | null;
   rating: number;
-  wins: number;
-  losses: number;
-  draws: number;
 };
 
 type GameRow = typeof gameTable.$inferSelect;
@@ -691,9 +688,6 @@ export function createArena({
           name: user.name,
           image: user.image,
           rating: playerStats.rating,
-          wins: playerStats.wins,
-          losses: playerStats.losses,
-          draws: playerStats.draws,
         })
         .from(playerStats)
         .innerJoin(user, eq(user.id, playerStats.userId))
