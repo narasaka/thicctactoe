@@ -444,7 +444,7 @@ function TutorialPage() {
 
   const canAdvance = step === 0 || step === 4 || completedSteps.has(step);
   const lastStep = step === TOTAL_STEPS - 1;
-  const showBack = step > 0 && !lastStep;
+  const canGoBack = step > 0;
 
   const goNext = () => {
     if (step < TOTAL_STEPS - 1) setStep(step + 1);
@@ -514,13 +514,15 @@ function TutorialPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Hidden rather than removed, so the controls never move. */}
+            {/* Disabled or hidden rather than removed, so the controls never move. */}
             <button
               onClick={goBack}
-              inert={!showBack}
+              disabled={!canGoBack}
+              inert={lastStep}
               className={buttonVariants({
                 intent: "secondary",
-                className: !showBack && "invisible transition-none",
+                disabled: !canGoBack || undefined,
+                className: lastStep && "invisible transition-none",
               })}
             >
               <ChevronLeft className="mr-1 inline h-4 w-4" />
