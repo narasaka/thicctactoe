@@ -463,8 +463,8 @@ export function createArena({
   }
 
   /** Where a ranked player with this record places, breaking ties like the leaderboard. */
-  async function rankOf(userId: string, rating: number, wins: number, joinedAt: Date) {
-    const [ahead] = await db
+  async function rankOf(tx: Tx, userId: string, rating: number, wins: number, joinedAt: Date) {
+    const [ahead] = await tx
       .select({ count: count() })
       .from(playerStats)
       .innerJoin(user, eq(user.id, playerStats.userId))
@@ -492,9 +492,9 @@ export function createArena({
   }
 
   /** Walks back from the current rating through the player's recent games. */
-  async function ratingsOf(userId: string, current: number): Promise<RatingPoint[]> {
+  async function ratingsOf(tx: Tx, userId: string, current: number): Promise<RatingPoint[]> {
     const seat = sql`case when ${gameTable.playerX} = ${userId} then 'X' else 'O' end`;
-    const rows = await db
+    const rows = await tx
       .select({
         startedAt: gameTable.startedAt,
         finishedAt: gameTable.finishedAt,
@@ -727,47 +727,49 @@ export function createArena({
 
     /** A player's record and rating trend, by public id. */
     async profile(playerId: string): Promise<Profile> {
-      const [found] = await db
-        .select({
-          id: user.id,
-          name: user.name,
-          image: user.image,
-          anonymous: user.isAnonymous,
-          createdAt: user.createdAt,
-          rating: playerStats.rating,
-          wins: playerStats.wins,
-          losses: playerStats.losses,
-          draws: playerStats.draws,
-        })
-        .from(user)
-        .leftJoin(playerStats, eq(playerStats.userId, user.id))
-        .where(eq(user.publicId, playerId));
-      if (!found) throw new ORPCError("NOT_FOUND", { message: "Player not found" });
+      // One snapshot, so a game finishing mid-read can't split the record from the trend.
+      return db.transaction(
+        async (tx) => {
+          const [found] = await tx
+            .select({
+              id: user.id,
+              name: user.name,
+              image: user.image,
+              anonymous: user.isAnonymous,
+              createdAt: user.createdAt,
+              rating: playerStats.rating,
+              wins: playerStats.wins,
+              losses: playerStats.losses,
+              draws: playerStats.draws,
+            })
+            .from(user)
+            .leftJoin(playerStats, eq(playerStats.userId, user.id))
+            .where(eq(user.publicId, playerId));
+          if (!found) throw new ORPCError("NOT_FOUND", { message: "Player not found" });
 
-      const rating = found.rating ?? 1000;
-      const wins = found.wins ?? 0;
-      const losses = found.losses ?? 0;
-      const draws = found.draws ?? 0;
-      const anonymous = found.anonymous ?? false;
-      const onBoard = !anonymous && wins + losses + draws > 0;
-      const [rank, ratings] = await Promise.all([
-        onBoard ? rankOf(found.id, rating, wins, found.createdAt) : null,
-        ratingsOf(found.id, rating),
-      ]);
+          const rating = found.rating ?? 1000;
+          const wins = found.wins ?? 0;
+          const losses = found.losses ?? 0;
+          const draws = found.draws ?? 0;
+          const anonymous = found.anonymous ?? false;
+          const onBoard = !anonymous && wins + losses + draws > 0;
 
-      return {
-        id: playerId,
-        name: found.name,
-        image: found.image,
-        anonymous,
-        joinedAt: found.createdAt,
-        rating,
-        rank,
-        wins,
-        losses,
-        draws,
-        ratings,
-      };
+          return {
+            id: playerId,
+            name: found.name,
+            image: found.image,
+            anonymous,
+            joinedAt: found.createdAt,
+            rating,
+            rank: onBoard ? await rankOf(tx, found.id, rating, wins, found.createdAt) : null,
+            wins,
+            losses,
+            draws,
+            ratings: await ratingsOf(tx, found.id, rating),
+          };
+        },
+        { isolationLevel: "repeatable read", accessMode: "read only" },
+      );
     },
 
     /** A player's finished games by public id, newest first. */
