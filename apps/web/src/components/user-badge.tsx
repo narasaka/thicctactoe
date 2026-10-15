@@ -24,9 +24,13 @@ export default function UserBadge() {
 
   const user = session?.user;
   const guest = !user || user.isAnonymous;
-  const history = (
-    <DropdownMenuItem onClick={() => void navigate({ to: "/history" })}>
-      Your games
+  const profile = user && (
+    <DropdownMenuItem
+      onClick={() =>
+        void navigate({ to: "/players/$playerId", params: { playerId: user.publicId } })
+      }
+    >
+      Your profile
     </DropdownMenuItem>
   );
 
@@ -55,7 +59,7 @@ export default function UserBadge() {
               {user && (
                 <>
                   <DropdownMenuSeparator />
-                  {history}
+                  {profile}
                 </>
               )}
             </DropdownMenuGroup>
@@ -63,7 +67,7 @@ export default function UserBadge() {
             <DropdownMenuGroup>
               <DropdownMenuLabel className="text-neutral-500">{user.email}</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {history}
+              {profile}
               <DropdownMenuItem onClick={() => setRenaming(true)}>Change name</DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
