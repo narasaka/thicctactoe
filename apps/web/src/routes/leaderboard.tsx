@@ -37,8 +37,7 @@ function LeaderboardPage() {
               <tr>
                 <th className="w-12 py-3 pl-4">#</th>
                 <th className="py-3">Player</th>
-                <th className="py-3 text-right">Rating</th>
-                <th className="py-3 pr-4 text-right">W / L / D</th>
+                <th className="py-3 pr-4 text-right">Rating</th>
               </tr>
             </thead>
             <tbody>
@@ -58,10 +57,7 @@ function LeaderboardPage() {
                       <span className="truncate font-medium">{player.name}</span>
                     </div>
                   </td>
-                  <td className="py-3 text-right font-mono font-semibold">{player.rating}</td>
-                  <td className="py-3 pr-4 text-right font-mono text-neutral-500">
-                    {player.wins} / {player.losses} / {player.draws}
-                  </td>
+                  <td className="py-3 pr-4 text-right font-mono font-semibold">{player.rating}</td>
                 </tr>
               ))}
             </tbody>
