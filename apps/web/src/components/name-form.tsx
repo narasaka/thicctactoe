@@ -39,6 +39,7 @@ export default function NameForm({
       return;
     }
     void queryClient.invalidateQueries({ queryKey: orpc.leaderboard.key() });
+    void queryClient.invalidateQueries({ queryKey: orpc.players.key() });
     onSaved?.();
   };
 

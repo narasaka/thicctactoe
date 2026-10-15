@@ -14,6 +14,8 @@ export const Route = createFileRoute("/leaderboard")({
   component: LeaderboardPage,
 });
 
+const ROW = "grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-4 px-4 py-3";
+
 function LeaderboardPage() {
   const { data: players = [] } = useQuery(orpc.leaderboard.queryOptions());
 
@@ -32,36 +34,38 @@ function LeaderboardPage() {
             </Link>
           </div>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs text-neutral-400 uppercase">
-              <tr>
-                <th className="w-12 py-3 pl-4">#</th>
-                <th className="py-3">Player</th>
-                <th className="py-3 pr-4 text-right">Rating</th>
-              </tr>
-            </thead>
-            <tbody>
+          <div className="text-sm">
+            <div className={cn(ROW, "text-xs text-neutral-400 uppercase")}>
+              <span>#</span>
+              <span>Player</span>
+              <span className="text-right">Rating</span>
+            </div>
+            <ol>
               {players.map((player) => (
-                <tr key={player.rank} className="border-t border-neutral-100">
-                  <td
-                    className={cn(
-                      "py-3 pl-4 font-semibold",
-                      player.rank <= 3 ? "text-amber-500" : "text-neutral-400",
-                    )}
+                <li key={player.id} className="border-t border-neutral-100">
+                  <Link
+                    to="/players/$playerId"
+                    params={{ playerId: player.id }}
+                    className={cn(ROW, "transition hover:bg-neutral-50")}
                   >
-                    {player.rank}
-                  </td>
-                  <td className="py-3">
-                    <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        player.rank <= 3 ? "text-amber-500" : "text-neutral-400",
+                      )}
+                    >
+                      {player.rank}
+                    </span>
+                    <span className="flex min-w-0 items-center gap-3">
                       <Avatar name={player.name} image={player.image} />
                       <span className="truncate font-medium">{player.name}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 pr-4 text-right font-mono font-semibold">{player.rating}</td>
-                </tr>
+                    </span>
+                    <span className="text-right font-mono font-semibold">{player.rating}</span>
+                  </Link>
+                </li>
               ))}
-            </tbody>
-          </table>
+            </ol>
+          </div>
         )}
       </div>
     </Layout>
