@@ -8,21 +8,7 @@ import {
   user,
 } from "@thicctactoe/db/schema/index";
 import { type Move, type Player, other, play, replay } from "@thicctactoe/game";
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gt,
-  inArray,
-  isNull,
-  lt,
-  ne,
-  notExists,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, notExists, or, sql } from "drizzle-orm";
 import type { PoolClient } from "pg";
 
 import { ratingChange } from "./rating";
@@ -170,6 +156,13 @@ export function createArena({
     eq(user.isAnonymous, false),
     gt(sql`${playerStats.wins} + ${playerStats.losses} + ${playerStats.draws}`, 0),
   );
+  /** Leaderboard order. The id is never shown; it keeps players who joined in the same instant apart. */
+  const standing = [
+    desc(playerStats.rating),
+    desc(playerStats.wins),
+    asc(user.createdAt),
+    asc(user.id),
+  ];
   const finishedBy = (userId: string) =>
     and(
       eq(gameTable.status, "finished"),
@@ -462,33 +455,24 @@ export function createArena({
     return found.id;
   }
 
-  /** Where a ranked player with this record places, breaking ties like the leaderboard. */
-  async function rankOf(tx: Tx, userId: string, rating: number, wins: number, joinedAt: Date) {
-    const [ahead] = await tx
-      .select({ count: count() })
+  /** Where a ranked player places, counted over the leaderboard's own order. */
+  async function rankOf(tx: Tx, userId: string) {
+    const standings = tx
+      .select({
+        id: user.id,
+        rank: sql<number>`row_number() over (order by ${sql.join(standing, sql`, `)})`
+          .mapWith(Number)
+          .as("rank"),
+      })
       .from(playerStats)
       .innerJoin(user, eq(user.id, playerStats.userId))
-      .where(
-        and(
-          ranked,
-          or(
-            gt(playerStats.rating, rating),
-            and(eq(playerStats.rating, rating), gt(playerStats.wins, wins)),
-            and(
-              eq(playerStats.rating, rating),
-              eq(playerStats.wins, wins),
-              lt(user.createdAt, joinedAt),
-            ),
-            and(
-              eq(playerStats.rating, rating),
-              eq(playerStats.wins, wins),
-              eq(user.createdAt, joinedAt),
-              lt(user.id, userId),
-            ),
-          ),
-        ),
-      );
-    return ahead!.count + 1;
+      .where(ranked)
+      .as("standings");
+    const [row] = await tx
+      .select({ rank: standings.rank })
+      .from(standings)
+      .where(eq(standings.id, userId));
+    return row!.rank;
   }
 
   /** Walks back from the current rating through the player's recent games. */
@@ -761,7 +745,7 @@ export function createArena({
             anonymous,
             joinedAt: found.createdAt,
             rating,
-            rank: onBoard ? await rankOf(tx, found.id, rating, wins, found.createdAt) : null,
+            rank: onBoard ? await rankOf(tx, found.id) : null,
             wins,
             losses,
             draws,
@@ -862,13 +846,7 @@ export function createArena({
         .from(playerStats)
         .innerJoin(user, eq(user.id, playerStats.userId))
         .where(ranked)
-        .orderBy(
-          desc(playerStats.rating),
-          desc(playerStats.wins),
-          asc(user.createdAt),
-          // Never shown; just keeps players who joined in the same instant in a stable order.
-          asc(user.id),
-        )
+        .orderBy(...standing)
         .limit(limit);
       return rows.map((row, index) => ({ rank: index + 1, ...row }));
     },

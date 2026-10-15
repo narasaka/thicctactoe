@@ -290,6 +290,21 @@ describe("profile", () => {
     expect((await arena.leaderboard()).map((entry) => entry.name)).toEqual(["a", "b", "c"]);
   });
 
+  test("ranks match the leaderboard for players who joined within the same millisecond", async () => {
+    for (const [id, joinedAt] of [
+      ["a", "2026-01-01 00:00:00.123900"],
+      ["b", "2026-01-01 00:00:00.123100"],
+    ]) {
+      await db.insert(user).values({ id: id!, name: id!, email: `${id}@test.dev` });
+      await db.execute(sql`update "user" set created_at = ${joinedAt} where id = ${id}`);
+      await db.insert(playerStats).values({ userId: id!, draws: 1 });
+    }
+    expect((await arena.leaderboard()).map((entry) => entry.name)).toEqual(["b", "a"]);
+    for (const entry of await arena.leaderboard()) {
+      expect((await arena.profile(entry.id)).rank).toBe(entry.rank);
+    }
+  });
+
   test("players who never finished a game have no rank or trend", async () => {
     const idle = await addUser("idle");
     expect(await arena.profile(await publicIdOf(idle))).toMatchObject({
