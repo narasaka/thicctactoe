@@ -235,7 +235,8 @@ function GameRow({ game, name, you }: { game: HistoryEntry; name: string; you: b
       >
         {result.label}
       </span>
-      <div className="relative">
+      {/* Positioned for the seat dot, which would otherwise lift it over the replay link. */}
+      <div className="pointer-events-none relative">
         <Avatar name={opponent?.name ?? "?"} image={opponent?.image} />
         <span
           className={cn(
