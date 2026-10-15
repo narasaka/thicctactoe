@@ -30,6 +30,11 @@ html {
   @apply bg-neutral-100;
 }
 
+/* Safari tints its toolbars from the body background, so it must match the pages too. */
+body {
+  @apply bg-neutral-100;
+}
+
 @theme {
   /* An hourglass turning over, then resting while the sand runs. */
   --animate-hourglass: hourglass 2.4s ease-in-out infinite;

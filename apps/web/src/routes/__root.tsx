@@ -17,6 +17,8 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      // Older Safari tints its toolbars from this; it must match the page background (neutral-100).
+      { name: "theme-color", content: "#f5f5f5" },
       { title: "ThiccTacToe" },
       { name: "description", content: "A twist on the classic Tic-Tac-Toe" },
     ],
@@ -29,7 +31,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         type: "font/woff2",
         crossOrigin: "anonymous",
       },
-      { rel: "icon", href: "/favicon.ico" },
+      { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
     ],
   }),
   component: RootDocument,
