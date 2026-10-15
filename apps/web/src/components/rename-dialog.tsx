@@ -24,9 +24,7 @@ export default function RenameDialog({
         showCloseButton={false}
         className="gap-0 rounded-2xl bg-white p-6 text-base shadow-xl ring-0 sm:max-w-sm"
       >
-        <DialogTitle className="text-2xl font-extrabold tracking-tight">
-          Change your name
-        </DialogTitle>
+        <DialogTitle className="text-2xl font-pixel">Change your name</DialogTitle>
         <DialogDescription className="mt-2 text-sm text-gray-500">
           This is what opponents and the leaderboard see.
         </DialogDescription>

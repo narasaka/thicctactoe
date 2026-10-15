@@ -30,9 +30,7 @@ export default function Onboarding() {
         {user && (
           <>
             <Avatar name={user.name} image={user.image} className="mx-auto size-14" />
-            <DialogTitle className="mt-4 text-2xl font-extrabold tracking-tight">
-              Welcome to ThiccTacToe
-            </DialogTitle>
+            <DialogTitle className="mt-4 text-2xl font-pixel">Welcome to ThiccTacToe</DialogTitle>
             <DialogDescription className="mt-2 text-sm text-gray-500">
               Pick the name opponents and the leaderboard will see. You can change it later from the
               menu.

@@ -22,6 +22,13 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      {
+        rel: "preload",
+        href: "/fonts/GeistPixel-Square.woff2",
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
+      },
       { rel: "icon", href: "/favicon.ico" },
     ],
   }),
