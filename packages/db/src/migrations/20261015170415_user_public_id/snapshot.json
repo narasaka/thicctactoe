@@ -349,7 +349,7 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "new_public_id()",
+      "default": null,
       "generated": null,
       "identity": null,
       "name": "public_id",
