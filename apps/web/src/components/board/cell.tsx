@@ -65,7 +65,7 @@ export default function Cell({
       ref={setNodeRef}
       data-cell={index}
       data-target={target ? "" : undefined}
-      onClick={target ? onClick : undefined}
+      onClick={onClick}
       className={cell({ isOver, mark, target: target !== null })}
     >
       {/* The piece comes first: a tapped move flies it in from the tray. */}

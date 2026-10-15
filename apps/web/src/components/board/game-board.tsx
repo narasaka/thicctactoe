@@ -149,6 +149,8 @@ export default function GameBoard({
     const from = document
       .querySelector(`[data-piece="${selected}"]`)
       ?.firstElementChild?.getBoundingClientRect();
+    // Whether it lands or not, the piece leaves the hand: a cell it can't go
+    // to gets the same "nope" as dropping it there.
     setSelected(null);
     flight.current = from ? { cell, moves: game.moves.length + 1, from } : null;
     if (!place(selected, cell)) flight.current = null;
