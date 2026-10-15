@@ -278,6 +278,18 @@ describe("profile", () => {
     expect((await arena.profile(await publicIdOf(O))).rank).toBe(2);
   });
 
+  test("ranks match the leaderboard even when everything else ties", async () => {
+    const joinedAt = new Date("2026-01-01");
+    for (const id of ["b", "a", "c"]) {
+      await db.insert(user).values({ id, name: id, email: `${id}@test.dev`, createdAt: joinedAt });
+      await db.insert(playerStats).values({ userId: id, draws: 1 });
+    }
+    for (const entry of await arena.leaderboard()) {
+      expect((await arena.profile(entry.id)).rank).toBe(entry.rank);
+    }
+    expect((await arena.leaderboard()).map((entry) => entry.name)).toEqual(["a", "b", "c"]);
+  });
+
   test("players who never finished a game have no rank or trend", async () => {
     const idle = await addUser("idle");
     expect(await arena.profile(await publicIdOf(idle))).toMatchObject({

@@ -463,7 +463,7 @@ export function createArena({
   }
 
   /** Where a ranked player with this record places, breaking ties like the leaderboard. */
-  async function rankOf(rating: number, wins: number, joinedAt: Date) {
+  async function rankOf(userId: string, rating: number, wins: number, joinedAt: Date) {
     const [ahead] = await db
       .select({ count: count() })
       .from(playerStats)
@@ -478,6 +478,12 @@ export function createArena({
               eq(playerStats.rating, rating),
               eq(playerStats.wins, wins),
               lt(user.createdAt, joinedAt),
+            ),
+            and(
+              eq(playerStats.rating, rating),
+              eq(playerStats.wins, wins),
+              eq(user.createdAt, joinedAt),
+              lt(user.id, userId),
             ),
           ),
         ),
@@ -745,7 +751,7 @@ export function createArena({
       const anonymous = found.anonymous ?? false;
       const onBoard = !anonymous && wins + losses + draws > 0;
       const [rank, ratings] = await Promise.all([
-        onBoard ? rankOf(rating, wins, found.createdAt) : null,
+        onBoard ? rankOf(found.id, rating, wins, found.createdAt) : null,
         ratingsOf(found.id, rating),
       ]);
 
@@ -854,7 +860,13 @@ export function createArena({
         .from(playerStats)
         .innerJoin(user, eq(user.id, playerStats.userId))
         .where(ranked)
-        .orderBy(desc(playerStats.rating), desc(playerStats.wins), asc(user.createdAt))
+        .orderBy(
+          desc(playerStats.rating),
+          desc(playerStats.wins),
+          asc(user.createdAt),
+          // Never shown; just keeps players who joined in the same instant in a stable order.
+          asc(user.id),
+        )
         .limit(limit);
       return rows.map((row, index) => ({ rank: index + 1, ...row }));
     },
