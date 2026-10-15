@@ -21,9 +21,7 @@ function HomePage() {
     <Layout className="flex w-full flex-col items-center">
       <DemoBoard />
       <h1 className="mt-8 text-center font-pixel text-6xl sm:text-7xl">ThiccTacToe</h1>
-      <p className="mt-2 text-center text-gray-500 sm:text-lg">
-        a twist on the classic TicTacToe
-      </p>
+      <p className="mt-2 text-center text-gray-500 sm:text-lg">a twist on the classic TicTacToe</p>
       <nav className="mt-8 flex w-full max-w-xs flex-col gap-3">
         <Link
           to="/play"
