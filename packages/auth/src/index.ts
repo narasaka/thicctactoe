@@ -1,5 +1,6 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import type { Database } from "@thicctactoe/db";
+import { publicId } from "@thicctactoe/db/public-id";
 import * as schema from "@thicctactoe/db/schema/auth";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
@@ -57,6 +58,8 @@ export function createAuth(env: AuthConfig, database: Database, hooks: AuthHooks
     },
     user: {
       additionalFields: {
+        /** The id in profile links. */
+        publicId: { type: "string", defaultValue: () => publicId(), input: false },
         /** Whether the player has picked a name since signing in for the first time. */
         onboarded: { type: "boolean", defaultValue: false, input: false },
       },

@@ -29,9 +29,10 @@ const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", tim
 
 function HistoryPage() {
   const { data: session, isPending } = authClient.useSession();
+  const id = session?.user.publicId ?? "";
   const history = useInfiniteQuery({
-    ...orpc.arena.history.infiniteOptions({
-      input: (after: string | undefined) => ({ after }),
+    ...orpc.players.history.infiniteOptions({
+      input: (after: string | undefined) => ({ id, after }),
       initialPageParam: undefined,
       getNextPageParam: (page) => page.next ?? undefined,
     }),

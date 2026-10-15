@@ -1,8 +1,16 @@
 import { defineRelationsPart } from "drizzle-orm";
 import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 
+import { publicId } from "../public-id";
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
+  /**
+   * The id in profile links. Its migration also gives the column a database
+   * default, `new_public_id()`, for writers that don't set it; that function
+   * exists only in migrated databases, so it is left out of the schema.
+   */
+  publicId: text("public_id").notNull().unique().$defaultFn(publicId),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
