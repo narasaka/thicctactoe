@@ -1,12 +1,16 @@
-import { defineRelationsPart } from "drizzle-orm";
+import { defineRelationsPart, sql } from "drizzle-orm";
 import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 
 import { publicId } from "../public-id";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
-  /** The id in profile links. */
-  publicId: text("public_id").notNull().unique().$defaultFn(publicId),
+  /** The id in profile links. The database default covers writers that don't set it. */
+  publicId: text("public_id")
+    .notNull()
+    .unique()
+    .default(sql`new_public_id()`)
+    .$defaultFn(publicId),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
