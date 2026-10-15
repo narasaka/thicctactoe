@@ -37,11 +37,12 @@ if (typeof window !== "undefined") {
   }
 }
 
-/** Plays `sounds` one after another. */
-export function playSounds(sounds: readonly Sound[]) {
+/** Plays `sounds` one after another, starting `delay` seconds from now. */
+export function playSounds(sounds: readonly Sound[], delay = 0) {
   if (!context || !output || context.state !== "running" || isMuted()) return;
   for (const [index, sound] of sounds.entries()) {
-    SYNTHS[sound.type](context, output, context.currentTime + index * SEQUENCE_GAP, sound);
+    const at = context.currentTime + delay + index * SEQUENCE_GAP;
+    SYNTHS[sound.type](context, output, at, sound);
   }
 }
 

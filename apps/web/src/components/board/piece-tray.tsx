@@ -20,12 +20,17 @@ export default function PieceTray({
   left,
   played,
   disabled,
+  selected,
+  onSelect,
 }: {
   variant: TrayVariant;
   player: Player;
   left: Record<Size, number>;
   played: readonly Slot[];
   disabled: boolean;
+  /** Id of the slot picked up by tapping, if any. */
+  selected: string | null;
+  onSelect: (id: string) => void;
 }) {
   const slots = (size: Size) => {
     const playedHere = played
@@ -61,6 +66,8 @@ export default function PieceTray({
                     size={size}
                     fit="stack"
                     disabled={disabled}
+                    selected={id === selected}
+                    onSelect={() => onSelect(id)}
                     className={overlap || undefined}
                   />
                 ) : (
@@ -88,7 +95,15 @@ export default function PieceTray({
         return all.map((index) => {
           const id = slotId(variant, { player, size, index });
           return inTray.has(index) ? (
-            <DraggablePiece key={id} id={id} player={player} size={size} disabled={disabled} />
+            <DraggablePiece
+              key={id}
+              id={id}
+              player={player}
+              size={size}
+              disabled={disabled}
+              selected={id === selected}
+              onSelect={() => onSelect(id)}
+            />
           ) : (
             <PieceView key={id} player={player} size={size} className="invisible" aria-hidden />
           );
