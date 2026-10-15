@@ -81,7 +81,13 @@ function ProfilePage() {
       <section className="mt-6 rounded-xl bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-neutral-500">Rating over time</h2>
         {profile.ratings.length > 1 ? (
-          <RatingChart ratings={profile.ratings} played={played} className="mt-3" />
+          // Another player's chart starts fresh rather than inheriting this one's hover.
+          <RatingChart
+            key={profile.id}
+            ratings={profile.ratings}
+            played={played}
+            className="mt-3"
+          />
         ) : (
           <p className="py-8 text-center text-sm text-neutral-500">
             {you ? "Finish a game to start your rating trend." : "No finished games yet."}
