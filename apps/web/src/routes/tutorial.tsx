@@ -2,9 +2,11 @@ import { DndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import type { DragEndEvent, UniqueIdentifier } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { cva } from "class-variance-authority";
-import { ChevronLeft, ChevronRight, Check, Triangle, Square, Pentagon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Square } from "lucide-react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { type ReactNode, useCallback, useState } from "react";
+
+import { Pips } from "@/components/board/piece";
 
 export const Route = createFileRoute("/tutorial")({
   head: () => ({
@@ -67,16 +69,8 @@ const buttonVariants = cva("rounded-lg px-4 py-2 font-pixel transition-all durat
   },
 });
 
-const ICON_PROPS = {
-  fill: "currentColor",
-  strokeWidth: 0,
-  className: "h-5 w-5 md:h-8 md:w-8",
-} as const;
-
 function PieceIcon({ size }: { size: PieceSize }) {
-  if (size === "small") return <Triangle {...ICON_PROPS} />;
-  if (size === "medium") return <Square {...ICON_PROPS} />;
-  return <Pentagon {...ICON_PROPS} />;
+  return <Pips size={size} className="h-5 w-5 md:h-8 md:w-8" />;
 }
 
 interface TutorialPieceProps {
@@ -145,30 +139,30 @@ function Step1Content() {
     <div className="flex flex-col items-center gap-6">
       <h2 className="text-3xl font-pixel sm:text-4xl">Your Pieces</h2>
       <p className="min-h-18 max-w-sm text-center text-neutral-600">
-        You have <span className="font-bold">3 sizes</span> of pieces. More sides means bigger:
-        triangle (3) &lt; square (4) &lt; pentagon (5).
+        You have <span className="font-bold">3 sizes</span> of pieces. More dots means bigger: one
+        &lt; two &lt; three.
       </p>
 
       <div className="flex items-end gap-6">
         <div className="flex flex-col items-center gap-2">
           <StaticPiece size="small" player="X" />
           <span className="text-xs font-medium text-neutral-500">Small &times;5</span>
-          <Triangle fill="currentColor" strokeWidth={0} className="h-4 w-4 text-neutral-400" />
+          <Pips size="small" className="h-4 w-4 text-neutral-400" />
         </div>
         <div className="flex flex-col items-center gap-2">
           <StaticPiece size="medium" player="X" />
           <span className="text-xs font-medium text-neutral-500">Medium &times;3</span>
-          <Square fill="currentColor" strokeWidth={0} className="h-4 w-4 text-neutral-400" />
+          <Pips size="medium" className="h-4 w-4 text-neutral-400" />
         </div>
         <div className="flex flex-col items-center gap-2">
           <StaticPiece size="large" player="X" />
           <span className="text-xs font-medium text-neutral-500">Large &times;1</span>
-          <Pentagon fill="currentColor" strokeWidth={0} className="h-4 w-4 text-neutral-400" />
+          <Pips size="large" className="h-4 w-4 text-neutral-400" />
         </div>
       </div>
 
       <p className="max-w-xs text-center text-sm text-neutral-500">
-        More sides = bigger piece. Use them wisely!
+        More dots = bigger piece. Use them wisely!
       </p>
     </div>
   );
@@ -389,15 +383,15 @@ function Step5Content() {
       <div className="flex flex-col gap-3 rounded-xl bg-white p-6 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1">
-            <Triangle fill="currentColor" strokeWidth={0} className="h-3 w-3 text-emerald-500" />
-            <Square fill="currentColor" strokeWidth={0} className="h-4 w-4 text-emerald-500" />
-            <Pentagon fill="currentColor" strokeWidth={0} className="h-5 w-5 text-emerald-500" />
+            <Pips size="small" className="h-3 w-3 text-emerald-500" />
+            <Pips size="medium" className="h-4 w-4 text-emerald-500" />
+            <Pips size="large" className="h-5 w-5 text-emerald-500" />
           </div>
-          <span className="text-sm text-neutral-700">Three sizes — more sides means bigger</span>
+          <span className="text-sm text-neutral-700">Three sizes — more dots means bigger</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex h-5 w-9 items-center justify-center">
-            <Pentagon fill="currentColor" strokeWidth={0} className="h-5 w-5 text-emerald-500" />
+            <Pips size="large" className="h-5 w-5 text-emerald-500" />
           </div>
           <span className="text-sm text-neutral-700">Bigger pieces gobble smaller ones</span>
         </div>

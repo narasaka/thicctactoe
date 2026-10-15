@@ -3,7 +3,6 @@ import { CSS } from "@dnd-kit/utilities";
 import type { Player, Size } from "@thicctactoe/game";
 import { cn } from "@thicctactoe/ui/lib/utils";
 import { cva } from "class-variance-authority";
-import { Pentagon, Square, Triangle } from "lucide-react";
 import type { ComponentProps } from "react";
 
 const piece = cva(
@@ -38,14 +37,37 @@ const SIZE_CLASS: Record<PieceFit, Record<Size, string>> = {
   cell: { small: "size-[40%]", medium: "size-[62%]", large: "size-[80%]" },
 };
 
-const ICON_CLASS: Record<PieceFit, string> = {
+const PIPS_CLASS: Record<PieceFit, string> = {
   tray: "size-5 md:size-8",
   stack: "size-5",
-  // Cells are size containers, so the icon keeps its proportion at any board size.
-  cell: "size-[24cqw]",
+  // Cells are size containers, so the dots keep their proportion at any board size.
+  cell: "size-[30cqw]",
 };
 
-const ICONS = { small: Triangle, medium: Square, large: Pentagon } as const;
+/** Dot centres in a 30-unit box: a lone dot, a pair, then a triangle. */
+const PIP_CENTRES: Record<Size, readonly (readonly [number, number])[]> = {
+  small: [[15, 15]],
+  medium: [
+    [7.5, 15],
+    [22.5, 15],
+  ],
+  large: [
+    [15, 8.5],
+    [7.5, 21.5],
+    [22.5, 21.5],
+  ],
+};
+
+/** One, two or three dots: more dots means a bigger piece. */
+export function Pips({ size, className }: { size: Size; className?: string }) {
+  return (
+    <svg viewBox="0 0 30 30" fill="currentColor" aria-hidden className={className}>
+      {PIP_CENTRES[size].map(([cx, cy]) => (
+        <circle key={`${cx},${cy}`} cx={cx} cy={cy} r={6} />
+      ))}
+    </svg>
+  );
+}
 
 type PieceProps = { player: Player; size: Size; fit?: PieceFit };
 
@@ -57,7 +79,6 @@ export function PieceView({
   className,
   ...props
 }: PieceProps & { disabled?: boolean } & ComponentProps<"div">) {
-  const Icon = ICONS[size];
   return (
     <div
       className={cn(
@@ -69,7 +90,7 @@ export function PieceView({
       )}
       {...props}
     >
-      <Icon fill="currentColor" strokeWidth={0} className={ICON_CLASS[fit]} />
+      <Pips size={size} className={PIPS_CLASS[fit]} />
     </div>
   );
 }
@@ -90,10 +111,9 @@ export function PieceBadge({
   className,
   ...props
 }: Omit<PieceProps, "fit"> & ComponentProps<"span">) {
-  const Icon = ICONS[size];
   return (
     <span className={cn(badge({ player }), className)} {...props}>
-      <Icon fill="currentColor" strokeWidth={0} className="size-[58%]" />
+      <Pips size={size} className="size-[66%]" />
     </span>
   );
 }
