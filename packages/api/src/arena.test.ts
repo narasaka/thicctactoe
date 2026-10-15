@@ -375,6 +375,17 @@ describe("leaderboard", () => {
 });
 
 describe("mergePlayers", () => {
+  test("a game against yourself leaves your rating trend flat", async () => {
+    const { id, X, O } = await startGame();
+    await arena.resign(id, O); // X: 1016, O: 984
+    // The guest who won was the account's owner in another browser.
+    await arena.mergePlayers(X, O);
+
+    const profile = await arena.profile(await publicIdOf(O));
+    expect(profile.rating).toBe(1000);
+    expect(profile.ratings.map((point) => point.rating)).toEqual([1000, 1000]);
+  });
+
   test("moves an anonymous player's games and record onto their account", async () => {
     const { id, X, O } = await startGame();
     await arena.resign(id, O); // X: 1016, 1 win

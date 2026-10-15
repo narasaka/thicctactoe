@@ -477,12 +477,14 @@ export function createArena({
 
   /** Walks back from the current rating through the player's recent games. */
   async function ratingsOf(tx: Tx, userId: string, current: number): Promise<RatingPoint[]> {
-    const seat = sql`case when ${gameTable.playerX} = ${userId} then 'X' else 'O' end`;
+    // Both seats count: merging a guest into an account they played can seat them twice.
+    const change = (player: Player) =>
+      sql`case when ${gameTable[`player${player}`]} = ${userId} then coalesce((${gameTable.ratingDelta} ->> ${player})::int, 0) else 0 end`;
     const rows = await tx
       .select({
         startedAt: gameTable.startedAt,
         finishedAt: gameTable.finishedAt,
-        delta: sql<number>`coalesce((${gameTable.ratingDelta} ->> ${seat})::int, 0)`,
+        delta: sql<number>`${change("X")} + ${change("O")}`,
       })
       .from(gameTable)
       .where(finishedBy(userId))
