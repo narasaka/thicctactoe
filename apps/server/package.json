@@ -7,7 +7,7 @@
     "check-types": "tsc -b ../../packages/api && tsc --noEmit",
     "compile": "bun build --compile --no-compile-autoload-dotenv --minify --sourcemap --bytecode ./src/index.ts --outfile server",
     "dev": "dotenvx run -fk ../../.env.keys -- bun run --hot src/index.ts",
-    "start": "dotenvx run -f .env.production -fk ../../.env.keys -- bun run dist/index.mjs",
+    "start": "env=\"$(dotenvx get -f .env.production -fk ../../.env.keys --format eval-export)\" && eval \"$env\" && exec bun dist/index.mjs",
     "auth:generate": "dotenvx run -fk ../../.env.keys -- bun x auth@latest generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes"
   },
   "dependencies": {
