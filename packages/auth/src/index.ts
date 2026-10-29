@@ -42,6 +42,12 @@ export function createAuth(env: AuthConfig, database: Database, hooks: AuthHooks
     trustedOrigins: [env.CORS_ORIGIN],
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
+    advanced: {
+      // Railway's edge sets X-Real-IP to the client's address, replacing any
+      // the client sent. Its X-Forwarded-For has a second, edge hop, which
+      // the default (a single-entry X-Forwarded-For) rejects.
+      ipAddress: { ipAddressHeaders: ["x-real-ip"] },
+    },
     socialProviders: {
       ...(env.GOOGLE_CLIENT_ID &&
         env.GOOGLE_CLIENT_SECRET && {
