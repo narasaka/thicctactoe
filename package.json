@@ -50,7 +50,7 @@
     "@dotenvx/dotenvx": "^2.34.2",
     "@thicctactoe/config": "workspace:*",
     "@types/bun": "catalog:",
-    "oxfmt": "^0.66.0",
+    "oxfmt": "^0.75.0",
     "oxlint": "^1.81.0",
     "railway": "^3.13.1",
     "turbo": "^2.10.12",

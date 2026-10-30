@@ -57,6 +57,9 @@ export const game = pgTable(
     index("game_matchmaking_idx")
       .on(table.createdAt)
       .where(sql`${table.status} = 'waiting' and ${table.private} = false`),
+    index("game_unplayed_idx")
+      .on(table.createdAt)
+      .where(sql`${table.status} = 'cancelled' and ${table.startedAt} is null`),
     index("game_playerX_idx").on(table.playerX),
     index("game_playerO_idx").on(table.playerO),
   ],

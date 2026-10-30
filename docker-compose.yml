@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: thicctactoe
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
       RUSTFS_ACCESS_KEY: rustfsadmin
       RUSTFS_SECRET_KEY: rustfsadmin
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
     volumes:
       - s3:/data
 

@@ -1,0 +1,1 @@
+CREATE INDEX "game_unplayed_idx" ON "game" ("created_at") WHERE "status" = 'cancelled' and "started_at" is null;

@@ -4,13 +4,13 @@ import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { appRouter } from "@thicctactoe/api/routers/index";
-import { Hono } from "hono";
+import { type Context, Hono, type Next } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
-import { createContext } from "./context";
+import { clientIp, createContext } from "./context";
 import { ENV } from "./env";
-import { auth, avatars } from "./services";
+import { auth, avatars, limits } from "./services";
 
 const app = new Hono();
 
@@ -52,6 +52,20 @@ export const rpcHandler = new RPCHandler(appRouter, {
     }),
   ],
 });
+
+// Both handlers serve the whole router. Floods are turned away before the
+// session lookup, which costs a database query.
+app.use("/rpc/*", limitRequests);
+app.use("/api-reference/*", limitRequests);
+
+async function limitRequests(c: Context, next: Next) {
+  const result = limits.hit("requests", [`ip:${clientIp(c)}`]);
+  if ("retryAfter" in result) {
+    c.header("Retry-After", String(result.retryAfter));
+    return c.json({ code: "TOO_MANY_REQUESTS", message: "Too many requests" }, 429);
+  }
+  await next();
+}
 
 app.use("/*", async (c, next) => {
   const context = await createContext({ context: c });

@@ -22,7 +22,7 @@ const COLOR_NAMES = { X: "Green", O: "Purple" } as const;
 const SEAT_RING = { X: "ring-emerald-400", O: "ring-indigo-400" } as const;
 
 const GUEST_PITCH = {
-  win: "Put that win on the board",
+  win: "Make your next win count",
   loss: "Climb the leaderboard",
   tie: "Climb the leaderboard",
 } as const;
@@ -40,12 +40,14 @@ export function gameResult(view: MatchView) {
         : winner === seat
           ? "You win!"
           : "You lose";
-  const reason =
+  const ending =
     view.endReason === "resign" && winner
       ? `${name(other(winner))} resigned`
       : view.endReason === "draw"
         ? "No moves left"
         : "Three in a row";
+  // Friend games, guests' games and games resigned before they began.
+  const reason = view.ratingDelta === null ? `${ending} · Unrated` : ending;
   return { headline, reason };
 }
 
@@ -138,8 +140,8 @@ function RematchAction({
 
 /**
  * The result of a game that just ended, over the board, chess.com style.
- * Guests also get asked to sign in, so the game and their rating carry over
- * to an account that shows up on the leaderboard.
+ * Guests also get asked to sign in, so the game carries over to an account
+ * that plays rated games and shows up on the leaderboard.
  */
 export default function GameOverDialog({
   view,
@@ -191,8 +193,8 @@ export default function GameOverDialog({
               {GUEST_PITCH[winner === null ? "tie" : winner === seat ? "win" : "loss"]}
             </p>
             <p className="mt-1 text-sm text-gray-500 short:hidden">
-              Guests don&apos;t show up on the leaderboard. Sign in to keep this game and your
-              rating.
+              Guest games are unrated. Sign in to keep this game and play rated games against other
+              signed-in players.
             </p>
             <div className="mt-4 flex flex-col gap-2 short:mt-3">
               {PROVIDERS.map(({ id, name }) => (

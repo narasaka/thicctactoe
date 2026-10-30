@@ -90,7 +90,7 @@ function ProfilePage() {
           />
         ) : (
           <p className="py-8 text-center text-sm text-neutral-500">
-            {you ? "Finish a game to start your rating trend." : "No finished games yet."}
+            {you ? "Finish a rated game to start your rating trend." : "No rated games yet."}
           </p>
         )}
       </section>
@@ -261,7 +261,8 @@ function GameRow({ game, name, you }: { game: HistoryEntry; name: string; you: b
         <div className="truncate text-xs text-neutral-500">
           {game.moveCount} {game.moveCount === 1 ? "move" : "moves"}
           {resigned && ` · ${resigned}`}
-          {game.private && " · friend game"} · {dateFormat.format(game.finishedAt)}
+          {game.private && " · friend game"}
+          {delta === null && " · unrated"} · {dateFormat.format(game.finishedAt)}
         </div>
       </div>
       {delta !== null && (

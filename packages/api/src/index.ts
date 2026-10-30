@@ -1,6 +1,7 @@
 import { ORPCError, os } from "@orpc/server";
 
 import type { Context } from "./context";
+import { clientsOf } from "./limits";
 
 export const o = os.$context<Context>();
 
@@ -18,3 +19,9 @@ const requireAuth = o.middleware(async ({ context, next }) => {
 });
 
 export const protectedProcedure = publicProcedure.use(requireAuth);
+
+/** Opens a game, at a limited rate per player and per IP. */
+export const gameOpeningProcedure = protectedProcedure.use(({ context, next }) => {
+  context.limits.take("games", clientsOf(context));
+  return next();
+});

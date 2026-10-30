@@ -8,7 +8,21 @@ import {
   user,
 } from "@thicctactoe/db/schema/index";
 import { type Move, type Player, other, play, replay } from "@thicctactoe/game";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, notExists, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { PoolClient } from "pg";
 
 import { ratingChange } from "./rating";
@@ -48,6 +62,7 @@ export type MatchView = {
   moves: LoggedMove[];
   winner: Player | null;
   endReason: "line" | "draw" | "resign" | null;
+  /** Rating changes once a rated game is over; null until then, and for unrated games. */
   ratingDelta: Record<Player, number> | null;
   /** The seat that offered a rematch, while the other has not accepted. */
   rematchOffer: Player | null;
@@ -67,6 +82,7 @@ export type HistoryEntry = {
   opponent: Pick<PlayerView, "id" | "name" | "image" | "anonymous"> | null;
   result: "win" | "loss" | "draw";
   endReason: "line" | "draw" | "resign";
+  /** Null for unrated games. */
   ratingDelta: number | null;
   moveCount: number;
   finishedAt: Date;
@@ -98,14 +114,14 @@ export type Profile = {
   anonymous: boolean;
   joinedAt: Date;
   rating: number;
-  /** Place on the leaderboard; null for guests and players yet to finish a game. */
+  /** Place on the leaderboard; null for guests and players yet to finish a rated game. */
   rank: number | null;
   wins: number;
   losses: number;
   draws: number;
   /**
-   * The rating before the first game shown, then after every game since,
-   * oldest first. Empty until the player finishes a game.
+   * The rating before the first rated game shown, then after every rated game
+   * since, oldest first. Empty until the player finishes a rated game.
    */
   ratings: RatingPoint[];
 };
@@ -121,6 +137,9 @@ const CHANNEL = "arena";
 /** How many of a player's most recent games their rating trend covers. */
 const RATING_POINTS = 500;
 
+/** A game that ends with fewer moves than this is unrated, like an abort. */
+const RATED_MIN_MOVES = 2;
+
 export type ArenaOptions = {
   db: Database;
   /** Public games older than this are not offered by matchmaking. */
@@ -131,6 +150,8 @@ export type ArenaOptions = {
   heartbeatMs?: number;
   /** Presence not refreshed for this long belongs to an instance that died. */
   staleMs?: number;
+  /** Cancelled games nobody played are deleted this long after they were opened. */
+  unplayedRetentionMs?: number;
 };
 
 export function createArena({
@@ -139,6 +160,7 @@ export function createArena({
   abandonGraceMs = 30_000,
   heartbeatMs = 5_000,
   staleMs = 20_000,
+  unplayedRetentionMs = 24 * 60 * 60_000,
 }: ArenaOptions) {
   const publisher = new EventPublisher<Record<string, Snapshot>>();
   /** gameId -> open watch streams on this instance */
@@ -151,7 +173,7 @@ export function createArena({
 
   const ago = (ms: number) => sql`now() - make_interval(secs => ${ms / 1000})`;
   const fresh = and(isNull(presence.leftAt), gt(presence.seenAt, ago(staleMs)));
-  /** Who shows up on the leaderboard: signed-in players who have finished a game. */
+  /** Who shows up on the leaderboard: signed-in players who have finished a rated game. */
   const ranked = and(
     eq(user.isAnonymous, false),
     gt(sql`${playerStats.wins} + ${playerStats.losses} + ${playerStats.draws}`, 0),
@@ -316,6 +338,30 @@ export function createArena({
     await tx.insert(playerStats).values({ userId }).onConflictDoNothing();
   }
 
+  /**
+   * Serializes a player's game openings across every instance, so two requests
+   * at once can't each find no open game and both open one.
+   */
+  async function lockHost(tx: Tx, userId: string) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`host:${userId}`}, 0))`);
+  }
+
+  /** The game this player opened that is still waiting for an opponent, if any. */
+  async function waitingOf(tx: Tx, userId: string, isPrivate: boolean) {
+    const [own] = await tx
+      .select({ id: gameTable.publicId })
+      .from(gameTable)
+      .where(
+        and(
+          eq(gameTable.status, "waiting"),
+          eq(gameTable.private, isPrivate),
+          eq(gameTable.createdBy, userId),
+        ),
+      )
+      .limit(1);
+    return own?.id;
+  }
+
   async function create(tx: Tx, userId: string, isPrivate: boolean) {
     await ensureStats(tx, userId);
     const seat: Player = Math.random() < 0.5 ? "X" : "O";
@@ -344,7 +390,24 @@ export function createArena({
       .where(eq(gameTable.id, row.id));
   }
 
-  /** Ends the game and applies rating changes. `winner` null means a draw. */
+  /**
+   * Whether a game counts towards ratings and records: a matchmade game
+   * between two signed-in players that both of them moved in. Friend games,
+   * guests and games resigned before they began can't be used to farm rating.
+   */
+  async function isRated(tx: Tx, row: GameRow, moves: LoggedMove[]) {
+    if (row.private || moves.length < RATED_MIN_MOVES) return false;
+    const players = await tx
+      .select({ anonymous: user.isAnonymous })
+      .from(user)
+      .where(inArray(user.id, [row.playerX!, row.playerO!]));
+    return players.length === 2 && players.every((player) => !player.anonymous);
+  }
+
+  /**
+   * Ends the game and, if it is rated, applies rating changes and records the
+   * result. `winner` null means a draw.
+   */
   async function finish(
     tx: Tx,
     row: GameRow,
@@ -352,30 +415,33 @@ export function createArena({
     endReason: "line" | "draw" | "resign",
     moves: LoggedMove[] = row.moves,
   ) {
-    const x = row.playerX!;
-    const o = row.playerO!;
-    const stats = await tx
-      .select()
-      .from(playerStats)
-      .where(inArray(playerStats.userId, [x, o]))
-      .for("update");
-    const ratingOf = (id: string) => stats.find((s) => s.userId === id)?.rating ?? 1000;
-    const scoreX = winner === "X" ? 1 : winner === "O" ? 0 : 0.5;
-    const deltaX = ratingChange(ratingOf(x), ratingOf(o), scoreX);
-    const ratingDelta = { X: deltaX, O: -deltaX };
+    let ratingDelta: Record<Player, number> | null = null;
+    if (await isRated(tx, row, moves)) {
+      const x = row.playerX!;
+      const o = row.playerO!;
+      const stats = await tx
+        .select()
+        .from(playerStats)
+        .where(inArray(playerStats.userId, [x, o]))
+        .for("update");
+      const ratingOf = (id: string) => stats.find((s) => s.userId === id)?.rating ?? 1000;
+      const scoreX = winner === "X" ? 1 : winner === "O" ? 0 : 0.5;
+      const deltaX = ratingChange(ratingOf(x), ratingOf(o), scoreX);
+      ratingDelta = { X: deltaX, O: -deltaX };
 
-    for (const [player, id] of [
-      ["X", x],
-      ["O", o],
-    ] as const) {
-      const result = winner === null ? "draws" : winner === player ? "wins" : "losses";
-      await tx
-        .update(playerStats)
-        .set({
-          rating: sql`${playerStats.rating} + ${ratingDelta[player]}`,
-          [result]: sql`${playerStats[result]} + 1`,
-        })
-        .where(eq(playerStats.userId, id));
+      for (const [player, id] of [
+        ["X", x],
+        ["O", o],
+      ] as const) {
+        const result = winner === null ? "draws" : winner === player ? "wins" : "losses";
+        await tx
+          .update(playerStats)
+          .set({
+            rating: sql`${playerStats.rating} + ${ratingDelta[player]}`,
+            [result]: sql`${playerStats[result]} + 1`,
+          })
+          .where(eq(playerStats.userId, id));
+      }
     }
 
     await tx
@@ -408,8 +474,9 @@ export function createArena({
 
   /**
    * Refreshes this instance's presence, then cleans up after every instance:
-   * players whose instance died go offline, and a waiting game nobody has
-   * watched for a while is cancelled, since it would strand whoever joins it.
+   * players whose instance died go offline, a waiting game nobody has watched
+   * for a while is cancelled, since it would strand whoever joins it, and
+   * cancelled games nobody played are eventually deleted.
    */
   async function sweep() {
     if (connections.size) {
@@ -445,6 +512,16 @@ export function createArena({
       )
       .returning({ gameId: gameTable.publicId });
     await db.delete(presence).where(lt(presence.leftAt, ago(abandonGraceMs)));
+    // Nobody played them, so nothing about them is worth keeping.
+    await db
+      .delete(gameTable)
+      .where(
+        and(
+          eq(gameTable.status, "cancelled"),
+          isNull(gameTable.startedAt),
+          lt(gameTable.createdAt, ago(unplayedRetentionMs)),
+        ),
+      );
     await broadcastAll([...lost, ...abandoned]);
   }
 
@@ -475,7 +552,7 @@ export function createArena({
     return row!.rank;
   }
 
-  /** Walks back from the current rating through the player's recent games. */
+  /** Walks back from the current rating through the player's recent rated games. */
   async function ratingsOf(tx: Tx, userId: string, current: number): Promise<RatingPoint[]> {
     // Both seats count: merging a guest into an account they played can seat them twice.
     const change = (player: Player) =>
@@ -487,7 +564,7 @@ export function createArena({
         delta: sql<number>`${change("X")} + ${change("O")}`,
       })
       .from(gameTable)
-      .where(finishedBy(userId))
+      .where(and(finishedBy(userId), isNotNull(gameTable.ratingDelta)))
       .orderBy(desc(gameTable.finishedAt), desc(gameTable.id))
       .limit(RATING_POINTS);
     let rating = current;
@@ -513,18 +590,9 @@ export function createArena({
     /** Joins the oldest open public game, or opens a new one. Returns its id. */
     async quickMatch(userId: string): Promise<string> {
       const { id, joined } = await db.transaction(async (tx) => {
-        const [own] = await tx
-          .select({ id: gameTable.publicId })
-          .from(gameTable)
-          .where(
-            and(
-              eq(gameTable.status, "waiting"),
-              eq(gameTable.private, false),
-              eq(gameTable.createdBy, userId),
-            ),
-          )
-          .limit(1);
-        if (own) return { id: own.id, joined: false };
+        await lockHost(tx, userId);
+        const own = await waitingOf(tx, userId, false);
+        if (own) return { id: own, joined: false };
 
         const [open] = await tx
           .select()
@@ -550,9 +618,15 @@ export function createArena({
       return id;
     },
 
-    /** Opens a private game that only people with the link can join. */
+    /**
+     * Opens a private game that only people with the link can join, or returns
+     * the one this player already has waiting.
+     */
     async invite(userId: string): Promise<string> {
-      return db.transaction((tx) => create(tx, userId, true));
+      return db.transaction(async (tx) => {
+        await lockHost(tx, userId);
+        return (await waitingOf(tx, userId, true)) ?? create(tx, userId, true);
+      });
     },
 
     async join(gameId: string, userId: string): Promise<MatchView> {
@@ -836,7 +910,7 @@ export function createArena({
       return { games, next: rows.length > limit ? page.at(-1)!.publicId : null };
     },
 
-    /** Signed-in (non-anonymous) players who have finished at least one game. */
+    /** Signed-in (non-anonymous) players who have finished at least one rated game. */
     async leaderboard(limit = 50): Promise<LeaderboardEntry[]> {
       const rows = await db
         .select({
