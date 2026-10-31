@@ -629,6 +629,29 @@ describe("games left mid-play", () => {
     await watched.return(undefined);
   });
 
+  test("a game survives an instance that stalled until its player's presence was swept up", async () => {
+    const owner = start();
+    const started = await startGame();
+    const watched = owner.watch(started.id, started.X);
+    await watched.next();
+    await arena.move(started.id, started.X, { player: "X", size: "small", cell: 0 });
+    // While the owner stalls with O to move, another instance sweeps X's presence away.
+    const other = start({ staleMs: 20, forfeitAfterMs: 100 });
+    const opponent = other.watch(started.id, started.O);
+    await opponent.next();
+    await Bun.sleep(150);
+    await other.sweep();
+    await arena.move(started.id, started.O, { player: "O", size: "small", cell: 8 });
+    // The owner recovers with X's stream still open, and now it is X's turn.
+    await owner.sweep();
+    expect((await owner.view(started.id, null)).players.X?.online).toBe(true);
+    await Bun.sleep(150);
+    await start({ forfeitAfterMs: 100 }).sweep();
+    expect((await owner.view(started.id, null)).status).toBe("active");
+    await watched.return(undefined);
+    await opponent.return(undefined);
+  });
+
   test("a game left before both players moved ends unrated", async () => {
     const leaving = start({ forfeitAfterMs: 20 });
     const { id, X } = await startGame();

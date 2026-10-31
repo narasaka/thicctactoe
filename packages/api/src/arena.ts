@@ -171,8 +171,8 @@ export function createArena({
   const publisher = new EventPublisher<Record<string, Snapshot>>();
   /** gameId -> open watch streams on this instance */
   const watching = new Map<string, number>();
-  /** Presence rows of this instance's watch streams. */
-  const connections = new Set<string>();
+  /** Presence rows of this instance's watch streams, by id. */
+  const connections = new Map<string, { gameId: string; userId: string }>();
   /** gameId -> pending delivery, so snapshots go out in the order they were read */
   const deliveries = new Map<string, Promise<void>>();
   const closing = new AbortController();
@@ -460,7 +460,7 @@ export function createArena({
   async function connect(gameId: string, userId: string) {
     const id = crypto.randomUUID();
     await db.insert(presence).values({ id, gameId, userId });
-    connections.add(id);
+    connections.set(id, { gameId, userId });
     return id;
   }
 
@@ -533,21 +533,36 @@ export function createArena({
 
   /**
    * Refreshes this instance's presence. If it stalled for long enough that
-   * another instance took its players for gone, their streams are still open,
-   * so they are back.
+   * another instance took its players for gone, or even swept their rows up,
+   * their streams are still open, so they are back.
    */
   async function refresh() {
-    const ids = [...connections];
+    const ids = [...connections.keys()];
     if (!ids.length) return [];
-    await db
+    const seen = await db
       .update(presence)
       .set({ seenAt: sql`now()` })
-      .where(and(inArray(presence.id, ids), isNull(presence.leftAt)));
+      .where(and(inArray(presence.id, ids), isNull(presence.leftAt)))
+      .returning({ id: presence.id });
     const back = await db
       .update(presence)
       .set({ seenAt: sql`now()`, leftAt: null })
       .where(and(inArray(presence.id, ids), isNotNull(presence.leftAt)))
-      .returning({ gameId: presence.gameId });
+      .returning({ id: presence.id, gameId: presence.gameId });
+    const found = new Set([...seen, ...back].map((row) => row.id));
+    for (const id of ids) {
+      const live = connections.get(id);
+      if (found.has(id) || !live) continue;
+      await db
+        .insert(presence)
+        .values({ id, ...live })
+        .onConflictDoNothing()
+        .then(
+          () => back.push({ id, gameId: live.gameId }),
+          // Its game or player is gone too.
+          (error) => console.error("presence restore failed", error),
+        );
+    }
     // A stream that closed meanwhile stays gone.
     const closed = await disconnect(ids.filter((id) => !connections.has(id)));
     return [...back, ...closed];
@@ -862,7 +877,7 @@ export function createArena({
       closing.abort();
       clearInterval(heartbeat);
       listener.stop();
-      await broadcastAll(await disconnect([...connections]));
+      await broadcastAll(await disconnect([...connections.keys()]));
     },
 
     /** A player's record and rating trend, by public id. */
