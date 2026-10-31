@@ -575,6 +575,66 @@ describe("abandoned games", () => {
   });
 });
 
+describe("abandoned games", () => {
+  test("a game is lost by the player to move once they have been gone a while", async () => {
+    const leaving = start({ forfeitAfterMs: 20 });
+    const started = await startGame();
+    await opening(started);
+    const { id, X, O } = started;
+    // O is still watching, but it is X's turn and X has left.
+    const stream = leaving.watch(id, O);
+    await stream.next();
+    await Bun.sleep(50);
+    await leaving.sweep();
+    expect(await leaving.view(id, null)).toMatchObject({
+      status: "finished",
+      winner: "O",
+      endReason: "abandon",
+      ratingDelta: { X: -16, O: 16 },
+    });
+    expect(await statsOf(X)).toMatchObject({ losses: 1 });
+    await stream.return(undefined);
+  });
+
+  test("a game survives while the player to move is watching, or has only just left", async () => {
+    const leaving = start({ forfeitAfterMs: 20 });
+    const started = await startGame();
+    const watched = leaving.watch(started.id, started.X);
+    await watched.next();
+    await Bun.sleep(50);
+    await leaving.sweep();
+    expect((await leaving.view(started.id, null)).status).toBe("active");
+
+    await watched.return(undefined);
+    await leaving.sweep();
+    expect((await leaving.view(started.id, null)).status).toBe("active");
+  });
+
+  test("a game left before both players moved ends unrated", async () => {
+    const leaving = start({ forfeitAfterMs: 20 });
+    const { id, X } = await startGame();
+    await arena.move(id, X, { player: "X", size: "small", cell: 4 });
+    await Bun.sleep(50);
+    await leaving.sweep();
+    expect(await leaving.view(id, null)).toMatchObject({
+      status: "finished",
+      winner: "X",
+      endReason: "abandon",
+      ratingDelta: null,
+    });
+  });
+
+  test("instances sweeping at once end the game once", async () => {
+    const [a, b] = [start({ forfeitAfterMs: 20 }), start({ forfeitAfterMs: 20 })];
+    const started = await startGame();
+    await opening(started);
+    await Bun.sleep(50);
+    await Promise.all([a.sweep(), b.sweep(), a.sweep(), b.sweep()]);
+    expect(await statsOf(started.X)).toMatchObject({ rating: 984, losses: 1 });
+    expect(await statsOf(started.O)).toMatchObject({ rating: 1016, wins: 1 });
+  });
+});
+
 describe("watch", () => {
   test("streams the current state, then every change, with presence", async () => {
     const { id, X } = await startGame();

@@ -22,7 +22,7 @@ export type LoggedMove = Move & {
 };
 
 export const gameStatus = pgEnum("game_status", ["waiting", "active", "finished", "cancelled"]);
-export const gameEndReason = pgEnum("game_end_reason", ["line", "draw", "resign"]);
+export const gameEndReason = pgEnum("game_end_reason", ["line", "draw", "resign", "abandon"]);
 
 export const game = pgTable(
   "game",
@@ -57,6 +57,9 @@ export const game = pgTable(
     index("game_matchmaking_idx")
       .on(table.createdAt)
       .where(sql`${table.status} = 'waiting' and ${table.private} = false`),
+    index("game_stalled_idx")
+      .on(table.updatedAt)
+      .where(sql`${table.status} = 'active'`),
     index("game_unplayed_idx")
       .on(table.createdAt)
       .where(sql`${table.status} = 'cancelled' and ${table.startedAt} is null`),

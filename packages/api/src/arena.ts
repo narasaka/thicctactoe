@@ -61,7 +61,7 @@ export type MatchView = {
   players: Record<Player, PlayerView | null>;
   moves: LoggedMove[];
   winner: Player | null;
-  endReason: "line" | "draw" | "resign" | null;
+  endReason: "line" | "draw" | "resign" | "abandon" | null;
   /** Rating changes once a rated game is over; null until then, and for unrated games. */
   ratingDelta: Record<Player, number> | null;
   /** The seat that offered a rematch, while the other has not accepted. */
@@ -81,7 +81,7 @@ export type HistoryEntry = {
   /** Null if the opponent's account has since been deleted. */
   opponent: Pick<PlayerView, "id" | "name" | "image" | "anonymous"> | null;
   result: "win" | "loss" | "draw";
-  endReason: "line" | "draw" | "resign";
+  endReason: "line" | "draw" | "resign" | "abandon";
   /** Null for unrated games. */
   ratingDelta: number | null;
   moveCount: number;
@@ -152,6 +152,11 @@ export type ArenaOptions = {
   staleMs?: number;
   /** Cancelled games nobody played are deleted this long after they were opened. */
   unplayedRetentionMs?: number;
+  /**
+   * An active game nobody has moved in for this long is lost by the player to
+   * move, if they have been gone this long too.
+   */
+  forfeitAfterMs?: number;
 };
 
 export function createArena({
@@ -161,6 +166,7 @@ export function createArena({
   heartbeatMs = 5_000,
   staleMs = 20_000,
   unplayedRetentionMs = 24 * 60 * 60_000,
+  forfeitAfterMs = 2 * 60_000,
 }: ArenaOptions) {
   const publisher = new EventPublisher<Record<string, Snapshot>>();
   /** gameId -> open watch streams on this instance */
@@ -412,7 +418,7 @@ export function createArena({
     tx: Tx,
     row: GameRow,
     winner: Player | null,
-    endReason: "line" | "draw" | "resign",
+    endReason: "line" | "draw" | "resign" | "abandon",
     moves: LoggedMove[] = row.moves,
   ) {
     let ratingDelta: Record<Player, number> | null = null;
@@ -475,8 +481,9 @@ export function createArena({
   /**
    * Refreshes this instance's presence, then cleans up after every instance:
    * players whose instance died go offline, a waiting game nobody has watched
-   * for a while is cancelled, since it would strand whoever joins it, and
-   * cancelled games nobody played are eventually deleted.
+   * for a while is cancelled, since it would strand whoever joins it, an
+   * active game whose player to move has left is lost by them, and cancelled
+   * games nobody played are eventually deleted.
    */
   async function sweep() {
     if (connections.size) {
@@ -511,7 +518,11 @@ export function createArena({
         ),
       )
       .returning({ gameId: gameTable.publicId });
-    await db.delete(presence).where(lt(presence.leftAt, ago(abandonGraceMs)));
+    const forfeited = await forfeitAbandoned();
+    // Kept long enough to tell how long a player has been gone.
+    await db
+      .delete(presence)
+      .where(lt(presence.leftAt, ago(Math.max(abandonGraceMs, forfeitAfterMs))));
     // Nobody played them, so nothing about them is worth keeping.
     await db
       .delete(gameTable)
@@ -522,7 +533,51 @@ export function createArena({
           lt(gameTable.createdAt, ago(unplayedRetentionMs)),
         ),
       );
-    await broadcastAll([...lost, ...abandoned]);
+    await broadcastAll([...lost, ...abandoned, ...forfeited]);
+  }
+
+  /** Ends the active games that have stalled because the player to move left. */
+  async function forfeitAbandoned() {
+    const stalled = and(
+      eq(gameTable.status, "active"),
+      lt(gameTable.updatedAt, ago(forfeitAfterMs)),
+    );
+    const candidates = await db
+      .select({ gameId: gameTable.publicId })
+      .from(gameTable)
+      .where(stalled);
+    const forfeited: { gameId: string }[] = [];
+    for (const { gameId } of candidates) {
+      const ended = await db.transaction(async (tx) => {
+        // Checked again under the lock, in case a move or another instance got there first.
+        const [row] = await tx
+          .select()
+          .from(gameTable)
+          .where(and(eq(gameTable.publicId, gameId), stalled))
+          .for("update");
+        if (!row) return false;
+        const absent = replay(row.moves).turn;
+        const userId = row[`player${absent}`];
+        if (userId) {
+          const [seen] = await tx
+            .select({ id: presence.id })
+            .from(presence)
+            .where(
+              and(
+                eq(presence.gameId, gameId),
+                eq(presence.userId, userId),
+                or(isNull(presence.leftAt), gt(presence.leftAt, ago(forfeitAfterMs))),
+              ),
+            )
+            .limit(1);
+          if (seen) return false;
+        }
+        await finish(tx, row, other(absent), "abandon");
+        return true;
+      });
+      if (ended) forfeited.push({ gameId });
+    }
+    return forfeited;
   }
 
   /** The internal id of the player with this public id. */

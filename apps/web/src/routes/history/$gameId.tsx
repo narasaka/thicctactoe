@@ -198,8 +198,10 @@ function Result({ view, name }: { view: MatchView; name: (player: Player) => str
   return (
     <>
       <span className="text-3xl font-pixel whitespace-nowrap sm:text-4xl">{headline}</span>
-      {view.endReason === "resign" && winner && (
-        <span className="truncate text-sm text-gray-500">{name(other(winner))} resigned</span>
+      {(view.endReason === "resign" || view.endReason === "abandon") && winner && (
+        <span className="truncate text-sm text-gray-500">
+          {name(other(winner))} {view.endReason === "resign" ? "resigned" : "left"}
+        </span>
       )}
     </>
   );
@@ -349,9 +351,9 @@ function MoveList({
           ),
         )}
       </ol>
-      {view.endReason === "resign" && view.winner && (
+      {(view.endReason === "resign" || view.endReason === "abandon") && view.winner && (
         <div className="flex items-center justify-between border-t border-neutral-100 py-2 pr-4 pl-12 text-sm text-neutral-500">
-          {name(other(view.winner))} resigned
+          {name(other(view.winner))} {view.endReason === "resign" ? "resigned" : "left"}
           {view.finishedAt && view.startedAt && (
             <span className="font-mono text-xs text-neutral-400">
               {formatClock(view.finishedAt.getTime() - view.startedAt.getTime())}
