@@ -63,7 +63,7 @@ function ratingCapNote(view: MatchView) {
     view.ratingDelta === null ? "This game is unrated." : "This game counted for less than usual.";
   return {
     title: `Rating capped: ${who}`,
-    detail: `${effect} One player can gain at most ${PAIR_RATING_CAP} rating from the same opponent in 24 hours.`,
+    detail: `${effect} One player can gain at most ${PAIR_RATING_CAP} rating, net, from the same opponent in any 24 hours.`,
   };
 }
 
@@ -233,7 +233,7 @@ function RatingCapNote({ view }: { view: MatchView }) {
   return (
     <div className="mx-6 mt-5 rounded-lg bg-amber-50 px-4 py-3 text-center text-sm short:mt-3 short:py-2">
       <p className="font-semibold text-amber-900">{title}</p>
-      <p className="mt-0.5 text-amber-800 short:hidden">{detail}</p>
+      <p className="mt-0.5 text-amber-800">{detail}</p>
     </div>
   );
 }
