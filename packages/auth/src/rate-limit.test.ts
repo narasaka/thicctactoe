@@ -58,7 +58,7 @@ const signInAsGuest = (auth: ReturnType<typeof instance>, ip: string) =>
 describe("rate limits", () => {
   test("count guest sign-ins from one IP in the database, across instances", async () => {
     const instances = [instance(), instance()];
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 10; i++) {
       expect((await signInAsGuest(instances[i % 2]!, "203.0.113.7")).status).toBe(200);
     }
     for (const auth of instances) {
@@ -67,6 +67,6 @@ describe("rate limits", () => {
     expect((await signInAsGuest(instances[0]!, "203.0.113.8")).status).toBe(200);
     // In Postgres rather than one process's memory, so separate servers share them.
     const { rows } = await db.execute<{ count: number }>(sql`select count from rate_limit`);
-    expect(rows.map((row) => row.count).sort((a, b) => a - b)).toEqual([1, 30]);
+    expect(rows.map((row) => row.count).sort((a, b) => a - b)).toEqual([1, 10]);
   });
 });

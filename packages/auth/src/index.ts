@@ -9,6 +9,7 @@ import { anonymous } from "better-auth/plugins";
 import { DISPLAY_NAME_MAX, displayName, guestName } from "./names";
 
 export type AuthConfig = {
+  NODE_ENV?: string;
   BETTER_AUTH_URL: string;
   BETTER_AUTH_SECRET: string;
   CORS_ORIGIN: string;
@@ -43,12 +44,15 @@ export function createAuth(env: AuthConfig, database: Database, hooks: AuthHooks
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     rateLimit: {
+      // Off in local development, where no client IP tells browsers apart.
+      enabled: env.NODE_ENV !== "development",
       // Kept in Postgres, so every server instance counts the same requests.
-      enabled: true,
       storage: "database",
       customRules: {
-        // Every new guest also gets a generated avatar, so they are worth more than a sign-in.
-        "/sign-in/anonymous": { window: 60 * 60, max: 30 },
+        // Every new guest also gets a generated avatar, so they cost more than a
+        // sign-in. A count only resets after a whole window with no new guest, so
+        // the window is short: up to 10 at once, then 10 quiet minutes.
+        "/sign-in/anonymous": { window: 10 * 60, max: 10 },
       },
     },
     advanced: {
