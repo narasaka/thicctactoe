@@ -6,7 +6,12 @@ import { sql } from "drizzle-orm";
 import { Client } from "pg";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 
+import { call } from "@orpc/server";
+
 import { type Arena, type ArenaOptions, type MatchView, createArena } from "./arena";
+import type { Context } from "./context";
+import { type Limits, createLimits } from "./limits";
+import { appRouter } from "./routers/index";
 
 // Needs Postgres, e.g. `docker compose up -d`. The schema is wiped on every run.
 const DATABASE_URL =
@@ -46,13 +51,23 @@ async function addUser(id: string, anonymous = false) {
   return id;
 }
 
-/** Starts a game between two fresh users; returns the users by seat. */
+/** Starts a matchmade game between two users; returns the users by seat. */
+async function match(a: string, b: string) {
+  const id = await arena.quickMatch(a);
+  expect(await arena.quickMatch(b)).toBe(id);
+  const { seat } = await arena.view(id, a);
+  return seat === "X" ? { id, X: a, O: b } : { id, X: b, O: a };
+}
+
+/** Starts a matchmade game between two fresh users. */
 async function startGame() {
-  const host = await addUser("host");
-  const guest = await addUser("guest");
-  const id = await arena.invite(host);
-  const { seat } = await arena.join(id, guest);
-  return seat === "X" ? { id, X: guest, O: host } : { id, X: host, O: guest };
+  return match(await addUser("host"), await addUser("guest"));
+}
+
+/** Both players move once, so the game is rated if nothing else rules it out. */
+async function opening({ id, X, O }: { id: string; X: string; O: string }) {
+  await arena.move(id, X, { player: "X", size: "small", cell: 0 });
+  await arena.move(id, O, { player: "O", size: "small", cell: 8 });
 }
 
 /** The id the player goes by in profile links. */
@@ -111,6 +126,129 @@ describe("matchmaking", () => {
   });
 });
 
+describe("open games", () => {
+  test("a player keeps one invite waiting, however often and wherever they ask", async () => {
+    const host = await addUser("host");
+    const other = start();
+    const ids = await Promise.all(
+      Array.from({ length: 5 }, () => [arena.invite(host), other.invite(host)]).flat(),
+    );
+    expect(new Set(ids).size).toBe(1);
+    // Once a friend joins, the next invite is a new game.
+    await arena.join(ids[0]!, await addUser("friend"));
+    expect(await arena.invite(host)).not.toBe(ids[0]);
+  });
+
+  test("asking for a quick match many times at once opens one game", async () => {
+    const host = await addUser("host");
+    const other = start();
+    const ids = await Promise.all(
+      Array.from({ length: 5 }, () => [arena.quickMatch(host), other.quickMatch(host)]).flat(),
+    );
+    expect(new Set(ids).size).toBe(1);
+  });
+
+  test("cancelled games nobody played are deleted after a while", async () => {
+    const cleaning = start({ unplayedRetentionMs: 20 });
+    const unplayed = await cleaning.invite(await addUser("loner"));
+    const played = await startGame();
+    await arena.resign(played.id, played.O);
+    await Bun.sleep(50);
+    await cleaning.sweep(); // Cancels the invite nobody opened...
+    await cleaning.sweep(); // ...which was opened long enough ago to go.
+    await expect(cleaning.view(unplayed, null)).rejects.toThrow("Game not found");
+    expect((await cleaning.view(played.id, null)).status).toBe("finished");
+  });
+});
+
+describe("rated games", () => {
+  test("friend games leave ratings, records and the leaderboard alone", async () => {
+    const rated = await startGame();
+    await opening(rated);
+    await arena.resign(rated.id, rated.O);
+    const { X, O } = rated;
+    const before = [await statsOf(X), await statsOf(O)];
+
+    const id = await arena.invite(X);
+    const { seat } = await arena.join(id, O);
+    await opening(seat === "O" ? { id, X, O } : { id, X: O, O: X });
+    expect(await arena.resign(id, X)).toMatchObject({ status: "finished", ratingDelta: null });
+
+    expect([await statsOf(X), await statsOf(O)]).toEqual(before);
+    const profile = await arena.profile(await publicIdOf(X));
+    expect(profile.ratings.map((point) => point.rating)).toEqual([1000, 1016]);
+    expect((await arena.history(await publicIdOf(X))).games[0]).toMatchObject({
+      id,
+      private: true,
+      result: "loss",
+      ratingDelta: null,
+    });
+  });
+
+  test("games with a guest are unrated", async () => {
+    const started = await startGame();
+    await db
+      .update(user)
+      .set({ isAnonymous: true })
+      .where(sql`${user.id} = ${started.O}`);
+    await opening(started);
+    expect(await arena.resign(started.id, started.O)).toMatchObject({ ratingDelta: null });
+    expect(await statsOf(started.X)).toMatchObject({ rating: 1000, wins: 0 });
+    expect(await statsOf(started.O)).toMatchObject({ rating: 1000, losses: 0 });
+    expect(await arena.leaderboard()).toEqual([]);
+  });
+
+  test("a game resigned before both players moved is unrated", async () => {
+    const { id, X, O } = await startGame();
+    await arena.move(id, X, { player: "X", size: "small", cell: 4 });
+    expect(await arena.resign(id, O)).toMatchObject({ winner: "X", ratingDelta: null });
+    expect(await statsOf(X)).toMatchObject({ rating: 1000, wins: 0 });
+  });
+});
+
+describe("limits", () => {
+  const contextOf = (limits: Limits, userId: string | null, ip = "203.0.113.1"): Context => ({
+    arena,
+    limits,
+    ip,
+    session: userId ? ({ user: { id: userId } } as Context["session"]) : null,
+  });
+
+  test("players and IPs may only open so many games a minute", async () => {
+    const limits = createLimits({ games: { max: 2, windowMs: 60_000 } });
+    const [a, b] = [await addUser("a"), await addUser("b")];
+    const quickMatch = (userId: string, ip?: string) =>
+      call(appRouter.arena.quickMatch, undefined, { context: contextOf(limits, userId, ip) });
+    await quickMatch(a);
+    await quickMatch(a);
+    // The player is out of games, wherever they ask from...
+    await expect(quickMatch(a, "203.0.113.2")).rejects.toThrow("Too many requests");
+    // ...and so is their IP, whoever asks from it.
+    await expect(quickMatch(b)).rejects.toThrow("Too many requests");
+    await quickMatch(b, "203.0.113.3");
+  });
+
+  test("a client may only watch so many games at once, and every closed stream frees its slot", async () => {
+    const limits = createLimits({ streamsPerClient: 2 });
+    const { id } = await startGame();
+    const watch = (gameId = id) =>
+      call(appRouter.arena.watch, { id: gameId }, { context: contextOf(limits, null) });
+
+    const [a, b] = [await watch(), await watch()];
+    await a.next();
+    await b.next();
+    await expect((await watch()).next()).rejects.toThrow("Too many open games");
+
+    await a.return(undefined);
+    // A stream that fails gives its slot back too.
+    await expect((await watch("nope")).next()).rejects.toThrow("Game not found");
+    const c = await watch();
+    expect((await c.next()).done).toBe(false);
+    await b.return(undefined);
+    await c.return(undefined);
+  });
+});
+
 describe("moves", () => {
   test("players may only move their own pieces, in turn", async () => {
     const { id, X, O } = await startGame();
@@ -141,7 +279,9 @@ describe("moves", () => {
   });
 
   test("resigning hands the win to the opponent", async () => {
-    const { id, X, O } = await startGame();
+    const started = await startGame();
+    const { id, X, O } = started;
+    await opening(started);
     const game = await arena.resign(id, X);
     expect(game).toMatchObject({ status: "finished", winner: "O", endReason: "resign" });
     expect(await statsOf(O)).toMatchObject({ wins: 1 });
@@ -162,7 +302,7 @@ describe("rematch", () => {
     const accepted = await arena.rematch(id, O);
     expect(accepted.rematchOffer).toBeNull();
     const next = await arena.view(accepted.rematchId!, X);
-    expect(next).toMatchObject({ status: "active", private: true, seat: "O", moves: [] });
+    expect(next).toMatchObject({ status: "active", private: false, seat: "O", moves: [] });
     expect(next.startedAt).not.toBeNull();
     expect((await arena.view(next.id, O)).seat).toBe("X");
     // A late click joins the same rematch rather than starting another.
@@ -214,6 +354,7 @@ describe("history", () => {
         opponent: { id: await publicIdOf(X), name: X, image: null, anonymous: false },
         result: "win",
         endReason: "resign",
+        ratingDelta: null,
         moveCount: 0,
       }),
       expect.objectContaining({
@@ -259,14 +400,16 @@ describe("history", () => {
 
 describe("profile", () => {
   test("shows a player's record, rank and rating after every game", async () => {
-    const { id: first, X, O } = await startGame();
-    await arena.resign(first, O); // X: 1016
-    const second = await arena.invite(X);
-    await arena.join(second, O);
-    await arena.resign(second, X); // X: 1016 - 17 = 999
-    const third = await arena.invite(X);
-    await arena.join(third, O);
-    await arena.resign(third, O); // X: 999 + 16 = 1015
+    const first = await startGame();
+    const { X, O } = first;
+    await opening(first);
+    await arena.resign(first.id, O); // X: 1016
+    const second = await match(X, O);
+    await opening(second);
+    await arena.resign(second.id, X); // X: 1016 - 17 = 999
+    const third = await match(X, O);
+    await opening(third);
+    await arena.resign(third.id, O); // X: 999 + 16 = 1015
 
     const profile = await arena.profile(await publicIdOf(X));
     expect(profile).toMatchObject({ name: X, anonymous: false, wins: 2, losses: 1, draws: 0 });
@@ -316,12 +459,15 @@ describe("profile", () => {
   });
 
   test("guests are not ranked", async () => {
-    const { id, X, O } = await startGame();
+    const started = await startGame();
+    const { id, X, O } = started;
+    await opening(started);
+    await arena.resign(id, O);
+    // Guests no longer play rated games, but ones from before still have a record.
     await db
       .update(user)
       .set({ isAnonymous: true })
       .where(sql`${user.id} = ${X}`);
-    await arena.resign(id, O);
     expect(await arena.profile(await publicIdOf(X))).toMatchObject({ anonymous: true, rank: null });
     expect((await arena.profile(await publicIdOf(O))).rank).toBe(1);
   });
@@ -359,12 +505,14 @@ describe("ids", () => {
 
 describe("leaderboard", () => {
   test("ranks signed-in players who have played, excluding anonymous ones", async () => {
-    const { id, X, O } = await startGame();
+    const started = await startGame();
+    const { id, X, O } = started;
+    await opening(started);
+    await arena.resign(id, O);
     await db
       .update(user)
       .set({ isAnonymous: true })
       .where(sql`${user.id} = ${O}`);
-    await arena.resign(id, O);
     await addUser("idle");
     await db.insert(playerStats).values({ userId: "idle" });
 
@@ -376,7 +524,9 @@ describe("leaderboard", () => {
 
 describe("mergePlayers", () => {
   test("a game against yourself leaves your rating trend flat", async () => {
-    const { id, X, O } = await startGame();
+    const started = await startGame();
+    const { id, X, O } = started;
+    await opening(started);
     await arena.resign(id, O); // X: 1016, O: 984
     // The guest who won was the account's owner in another browser.
     await arena.mergePlayers(X, O);
@@ -387,13 +537,14 @@ describe("mergePlayers", () => {
   });
 
   test("moves an anonymous player's games and record onto their account", async () => {
-    const { id, X, O } = await startGame();
+    const started = await startGame();
+    const { id, X, O } = started;
+    await opening(started);
     await arena.resign(id, O); // X: 1016, 1 win
     const account = await addUser("account");
-    const other = await addUser("other");
-    const second = await arena.invite(account);
-    await arena.join(second, other);
-    await arena.resign(second, other); // account: 1016, 1 win
+    const second = await match(account, await addUser("other"));
+    await opening(second);
+    await arena.resign(second.id, second.X === account ? second.O : second.X); // account: 1016, 1 win
 
     await arena.mergePlayers(X, account);
 

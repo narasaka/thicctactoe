@@ -34,8 +34,8 @@ function LobbyPage() {
       <p className="mt-2 min-h-18 text-gray-500">
         {session &&
           (session.user.isAnonymous
-            ? `You're playing as ${session.user.name}. Sign in any time to keep your record and join the leaderboard.`
-            : "Every game counts towards the leaderboard.")}
+            ? `You're playing as ${session.user.name}. Guest games are unrated; sign in any time to play rated games and join the leaderboard.`
+            : "Matches against other signed-in players count towards the leaderboard. Friend games are unrated.")}
       </p>
       <div className="mt-6 flex flex-col gap-2 px-8 md:flex-row md:justify-center">
         <Button disabled={busy} onClick={() => quickMatch.mutate()}>

@@ -2,7 +2,8 @@ import type { RouterClient } from "@orpc/server";
 import { moveSchema } from "@thicctactoe/game";
 import { z } from "zod";
 
-import { protectedProcedure, publicProcedure } from "../index";
+import { gameOpeningProcedure, protectedProcedure, publicProcedure } from "../index";
+import { clientsOf } from "../limits";
 
 const gameInput = z.object({ id: z.string().min(1) });
 
@@ -11,10 +12,10 @@ export const appRouter = {
     return "OK";
   }),
   arena: {
-    quickMatch: protectedProcedure.handler(async ({ context }) => ({
+    quickMatch: gameOpeningProcedure.handler(async ({ context }) => ({
       id: await context.arena.quickMatch(context.session.user.id),
     })),
-    invite: protectedProcedure.handler(async ({ context }) => ({
+    invite: gameOpeningProcedure.handler(async ({ context }) => ({
       id: await context.arena.invite(context.session.user.id),
     })),
     join: protectedProcedure
@@ -28,7 +29,7 @@ export const appRouter = {
     resign: protectedProcedure
       .input(gameInput)
       .handler(({ context, input }) => context.arena.resign(input.id, context.session.user.id)),
-    rematch: protectedProcedure
+    rematch: gameOpeningProcedure
       .input(gameInput)
       .handler(({ context, input }) => context.arena.rematch(input.id, context.session.user.id)),
     cancel: protectedProcedure
@@ -41,9 +42,19 @@ export const appRouter = {
       ),
     watch: publicProcedure
       .input(gameInput)
-      .handler(({ context, input, signal }) =>
-        context.arena.watch(input.id, context.session?.user.id ?? null, signal),
-      ),
+      .use(({ context, next }) => {
+        context.limits.take("watches", clientsOf(context));
+        return next();
+      })
+      // The slot is taken once the stream starts, so its `finally` always gives it back.
+      .handler(async function* ({ context, input, signal }) {
+        const release = context.limits.openStream(clientsOf(context));
+        try {
+          yield* context.arena.watch(input.id, context.session?.user.id ?? null, signal);
+        } finally {
+          release();
+        }
+      }),
   },
   players: {
     profile: publicProcedure

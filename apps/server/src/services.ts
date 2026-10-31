@@ -1,4 +1,5 @@
 import { createArena } from "@thicctactoe/api/arena";
+import { createLimits } from "@thicctactoe/api/limits";
 import { createAuth } from "@thicctactoe/auth";
 import { createDb } from "@thicctactoe/db";
 import { user } from "@thicctactoe/db/schema/auth";
@@ -10,6 +11,7 @@ import { ENV } from "./env";
 
 export const db = createDb(ENV);
 export const arena = createArena({ db });
+export const limits = createLimits();
 
 // `bun --hot` re-runs this module in the same process: retire the previous arena.
 const live = globalThis as { arena?: typeof arena };

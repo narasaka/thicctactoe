@@ -250,7 +250,7 @@ function WaitingRoom({ view, cancel }: { view: MatchView; cancel: () => void }) 
       )}
       <p className="text-sm text-gray-500">
         {view.private
-          ? "The game starts as soon as they open the link."
+          ? "The game starts as soon as they open the link. Friend games are unrated."
           : "Keep this page open; the game starts when someone joins."}
       </p>
       {view.seat && (

@@ -49,7 +49,7 @@ export default function UserBadge() {
             <DropdownMenuGroup>
               <DropdownMenuLabel className="text-neutral-500">
                 {user
-                  ? "Playing as a guest. Sign in to keep your record and join the leaderboard."
+                  ? "Playing as a guest. Sign in to keep your games, play rated games and join the leaderboard."
                   : "Sign in to join the leaderboard."}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />

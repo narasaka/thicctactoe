@@ -4,13 +4,13 @@ import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { appRouter } from "@thicctactoe/api/routers/index";
-import { Hono } from "hono";
+import { type Context, Hono, type Next } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
-import { createContext } from "./context";
+import { clientIp, createContext } from "./context";
 import { ENV } from "./env";
-import { auth, avatars } from "./services";
+import { auth, avatars, limits } from "./services";
 
 const app = new Hono();
 
@@ -53,29 +53,28 @@ export const rpcHandler = new RPCHandler(appRouter, {
   ],
 });
 
-app.use("/*", async (c, next) => {
-  const context = await createContext({ context: c });
+// Both handlers serve the whole router. Only their paths look up the session,
+// which costs a database query, and floods are turned away before it.
+app.use("/rpc/*", limitRequests, serve(rpcHandler, "/rpc"));
+app.use("/api-reference/*", limitRequests, serve(apiHandler, "/api-reference"));
 
-  const rpcResult = await rpcHandler.handle(c.req.raw, {
-    prefix: "/rpc",
-    context: context,
-  });
-
-  if (rpcResult.matched) {
-    return c.newResponse(rpcResult.response.body, rpcResult.response);
+async function limitRequests(c: Context, next: Next) {
+  const result = limits.hit("requests", [`ip:${clientIp(c)}`]);
+  if ("retryAfter" in result) {
+    c.header("Retry-After", String(result.retryAfter));
+    return c.json({ code: "TOO_MANY_REQUESTS", message: "Too many requests" }, 429);
   }
-
-  const apiResult = await apiHandler.handle(c.req.raw, {
-    prefix: "/api-reference",
-    context: context,
-  });
-
-  if (apiResult.matched) {
-    return c.newResponse(apiResult.response.body, apiResult.response);
-  }
-
   await next();
-});
+}
+
+function serve(handler: typeof rpcHandler | typeof apiHandler, prefix: `/${string}`) {
+  return async (c: Context, next: Next) => {
+    const context = await createContext({ context: c });
+    const { matched, response } = await handler.handle(c.req.raw, { prefix, context });
+    if (matched) return c.newResponse(response.body, response);
+    await next();
+  };
+}
 
 app.get("/", (c) => {
   return c.text("OK");
