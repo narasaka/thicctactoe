@@ -64,6 +64,13 @@ async function startGame() {
   return match(await addUser("host"), await addUser("guest"));
 }
 
+/** Starts a friend game the host invited the friend to; returns the users by seat. */
+async function befriend(host: string, friend: string, rated?: boolean) {
+  const id = await arena.invite(host, rated);
+  const { seat } = await arena.join(id, friend);
+  return seat === "X" ? { id, X: friend, O: host } : { id, X: host, O: friend };
+}
+
 /** Both players move once, so the game is rated if nothing else rules it out. */
 async function opening({ id, X, O }: { id: string; X: string; O: string }) {
   await arena.move(id, X, { player: "X", size: "small", cell: 0 });
@@ -162,16 +169,22 @@ describe("open games", () => {
 });
 
 describe("rated games", () => {
-  test("friend games leave ratings, records and the leaderboard alone", async () => {
+  test("matchmade games are rated", async () => {
+    const { id, X } = await startGame();
+    expect(await arena.view(id, X)).toMatchObject({ private: false, rated: true });
+  });
+
+  test("unrated friend games leave ratings, records and the leaderboard alone", async () => {
     const rated = await startGame();
     await opening(rated);
     await arena.resign(rated.id, rated.O);
     const { X, O } = rated;
     const before = [await statsOf(X), await statsOf(O)];
 
-    const id = await arena.invite(X);
-    const { seat } = await arena.join(id, O);
-    await opening(seat === "O" ? { id, X, O } : { id, X: O, O: X });
+    const friendly = await befriend(X, O);
+    const { id } = friendly;
+    expect(await arena.view(id, null)).toMatchObject({ private: true, rated: false });
+    await opening(friendly);
     expect(await arena.resign(id, X)).toMatchObject({ status: "finished", ratingDelta: null });
 
     expect([await statsOf(X), await statsOf(O)]).toEqual(before);
@@ -183,6 +196,63 @@ describe("rated games", () => {
       result: "loss",
       ratingDelta: null,
     });
+  });
+
+  test("rated friend games between signed-in players change ratings", async () => {
+    const host = await addUser("host");
+    const friend = await addUser("friend");
+    const started = await befriend(host, friend, true);
+    expect(await arena.view(started.id, null)).toMatchObject({ private: true, rated: true });
+    await opening(started);
+    expect(await arena.resign(started.id, started.O)).toMatchObject({
+      winner: "X",
+      ratingDelta: { X: 16, O: -16 },
+    });
+    expect(await statsOf(started.X)).toMatchObject({ rating: 1016, wins: 1 });
+    expect(await statsOf(started.O)).toMatchObject({ rating: 984, losses: 1 });
+    expect((await arena.leaderboard()).map((entry) => entry.name)).toEqual([started.X, started.O]);
+  });
+
+  test("a host can keep a rated and an unrated invite waiting, and the friend gets the one they were sent", async () => {
+    const host = await addUser("host");
+    const unrated = await arena.invite(host);
+    const rated = await arena.invite(host, true);
+    expect(rated).not.toBe(unrated);
+    expect(await arena.invite(host, true)).toBe(rated);
+    expect(await arena.invite(host)).toBe(unrated);
+    expect((await arena.join(rated, await addUser("friend"))).rated).toBe(true);
+  });
+
+  test("guests can't accept or open rated invites, but can play unrated ones", async () => {
+    const host = await addUser("host");
+    const guest = await addUser("guest", true);
+    const rated = await arena.invite(host, true);
+    await expect(arena.join(rated, guest)).rejects.toThrow("Sign in to accept a rated game");
+    expect((await arena.view(rated, null)).status).toBe("waiting");
+    // Once they sign in, they can.
+    await db
+      .update(user)
+      .set({ isAnonymous: false })
+      .where(sql`${user.id} = ${guest}`);
+    expect((await arena.join(rated, guest)).status).toBe("active");
+
+    const other = await addUser("other", true);
+    expect((await arena.join(await arena.invite(host), other)).status).toBe("active");
+    await expect(arena.invite(other, true)).rejects.toThrow("Sign in to play rated games");
+  });
+
+  test("the invite route opens a rated invite only when asked to", async () => {
+    const host = await addUser("host");
+    const context: Context = {
+      arena,
+      limits: createLimits(),
+      ip: "203.0.113.1",
+      session: { user: { id: host } } as Context["session"],
+    };
+    const rated = await call(appRouter.arena.invite, { rated: true }, { context });
+    expect((await arena.view(rated.id, null)).rated).toBe(true);
+    const unrated = await call(appRouter.arena.invite, undefined, { context });
+    expect((await arena.view(unrated.id, null)).rated).toBe(false);
   });
 
   test("games with a guest are unrated", async () => {
@@ -307,6 +377,23 @@ describe("rematch", () => {
     expect((await arena.view(next.id, O)).seat).toBe("X");
     // A late click joins the same rematch rather than starting another.
     expect((await arena.rematch(id, X)).rematchId).toBe(next.id);
+  });
+
+  test("keeps whether the game was private and rated", async () => {
+    const host = await addUser("host");
+    const friend = await addUser("friend");
+    for (const rated of [true, false]) {
+      const { id, X, O } = await befriend(host, friend, rated);
+      await arena.resign(id, O);
+      await arena.rematch(id, X);
+      const { rematchId } = await arena.rematch(id, O);
+      expect(await arena.view(rematchId!, X)).toMatchObject({ private: true, rated });
+    }
+    const { id, X, O } = await match(host, friend);
+    await arena.resign(id, O);
+    await arena.rematch(id, X);
+    const { rematchId } = await arena.rematch(id, O);
+    expect(await arena.view(rematchId!, X)).toMatchObject({ private: false, rated: true });
   });
 
   test("only the players can ask for one", async () => {
@@ -523,7 +610,7 @@ describe("leaderboard", () => {
 });
 
 describe("mergePlayers", () => {
-  test("a game against yourself leaves your rating trend flat", async () => {
+  test("a game against yourself keeps only what the account lost", async () => {
     const started = await startGame();
     const { id, X, O } = started;
     await opening(started);
@@ -531,12 +618,14 @@ describe("mergePlayers", () => {
     // The guest who won was the account's owner in another browser.
     await arena.mergePlayers(X, O);
 
-    const profile = await arena.profile(await publicIdOf(O));
-    expect(profile.rating).toBe(1000);
-    expect(profile.ratings.map((point) => point.rating)).toEqual([1000, 1000]);
+    expect(await arena.profile(await publicIdOf(O))).toMatchObject({
+      rating: 984,
+      wins: 0,
+      losses: 1,
+    });
   });
 
-  test("moves an anonymous player's games and record onto their account", async () => {
+  test("moves an anonymous player's games, but not their rating or record, onto their account", async () => {
     const started = await startGame();
     const { id, X, O } = started;
     await opening(started);
@@ -549,7 +638,7 @@ describe("mergePlayers", () => {
     await arena.mergePlayers(X, account);
 
     expect((await arena.view(id, account)).seat).not.toBeNull();
-    expect(await statsOf(account)).toMatchObject({ rating: 1032, wins: 2 });
+    expect(await statsOf(account)).toMatchObject({ rating: 1016, wins: 1, losses: 0 });
     expect(await db.query.playerStats.findFirst({ where: { userId: X } })).toBeUndefined();
   });
 });

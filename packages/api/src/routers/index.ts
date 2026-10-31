@@ -15,9 +15,12 @@ export const appRouter = {
     quickMatch: gameOpeningProcedure.handler(async ({ context }) => ({
       id: await context.arena.quickMatch(context.session.user.id),
     })),
-    invite: gameOpeningProcedure.handler(async ({ context }) => ({
-      id: await context.arena.invite(context.session.user.id),
-    })),
+    invite: gameOpeningProcedure
+      // Optional, so clients from before rated invites keep working.
+      .input(z.object({ rated: z.boolean().default(false) }).optional())
+      .handler(async ({ context, input }) => ({
+        id: await context.arena.invite(context.session.user.id, input?.rated),
+      })),
     join: protectedProcedure
       .input(gameInput)
       .handler(({ context, input }) => context.arena.join(input.id, context.session.user.id)),

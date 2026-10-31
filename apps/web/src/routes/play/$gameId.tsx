@@ -9,6 +9,7 @@ import Button, { buttonClass } from "@/components/button";
 import GameOverDialog, { GameOverActions, gameResult } from "@/components/game-over";
 import Layout from "@/components/layout";
 import PlayerCard, { piecesUsed } from "@/components/player-card";
+import SignInButtons from "@/components/sign-in-buttons";
 import { playSound } from "@/lib/audio";
 import { useMatch } from "@/lib/match";
 import type { MatchView } from "@/lib/match-view";
@@ -37,8 +38,10 @@ function Match({ gameId }: { gameId: string }) {
   const match = useMatch(gameId, session?.user.id);
   const { view, game, seat, error, join } = match;
 
-  // Opening an invite link joins the game (the host already has a seat).
-  const joinable = view?.status === "waiting" && session && seat === null;
+  const guest = session?.user.isAnonymous ?? false;
+  // Opening a matchmade game's link joins it (the host already has a seat). An
+  // invite waits for the friend to accept, once they know whether it is rated.
+  const joinable = view?.status === "waiting" && !view.private && session && seat === null;
   useEffect(() => {
     if (joinable && join.isIdle) join.mutate();
   }, [joinable, join]);
@@ -61,6 +64,16 @@ function Match({ gameId }: { gameId: string }) {
       <Layout>
         <Loader2 className="animate-spin text-neutral-400" />
       </Layout>
+    );
+  }
+  if (view.status === "waiting" && view.private && seat === null) {
+    return (
+      <Invitation
+        view={view}
+        guest={guest}
+        accepting={!session || join.isPending}
+        accept={() => join.mutate()}
+      />
     );
   }
   if (view.status === "waiting") {
@@ -111,7 +124,7 @@ function Match({ gameId }: { gameId: string }) {
         view={view}
         open={gameOver.open}
         onOpenChange={gameOver.setOpen}
-        guest={session?.user.isAnonymous ?? false}
+        guest={guest}
         rematch={() => match.rematch.mutate()}
       />
     </Layout>
@@ -233,6 +246,7 @@ function WaitingRoom({ view, cancel }: { view: MatchView; cancel: () => void }) 
 
   return (
     <Message title={view.private ? "Invite a friend" : "Finding an opponent…"}>
+      {view.private && <RatedTag rated={view.rated} />}
       {view.private ? (
         <div className="flex w-full max-w-md items-center gap-2 rounded-lg bg-white p-2 shadow-sm">
           <input
@@ -250,7 +264,7 @@ function WaitingRoom({ view, cancel }: { view: MatchView; cancel: () => void }) 
       )}
       <p className="text-sm text-gray-500">
         {view.private
-          ? "The game starts as soon as they open the link. Friend games are unrated."
+          ? `Send them the link; the game starts once they accept. ${RATED_NOTE[`${view.rated}`]}`
           : "Keep this page open; the game starts when someone joins."}
       </p>
       {view.seat && (
@@ -259,6 +273,58 @@ function WaitingRoom({ view, cancel }: { view: MatchView; cancel: () => void }) 
         </Button>
       )}
     </Message>
+  );
+}
+
+const RATED_NOTE = {
+  true: "The result counts towards both players' ratings.",
+  false: "Nobody's rating changes.",
+} as const;
+
+/** What a friend sees when they open an invite link: the kind of game, before they join it. */
+function Invitation({
+  view,
+  guest,
+  accepting,
+  accept,
+}: {
+  view: MatchView;
+  guest: boolean;
+  accepting: boolean;
+  accept: () => void;
+}) {
+  const host = view.players.X ?? view.players.O;
+  return (
+    <Message title="You're invited">
+      <RatedTag rated={view.rated} />
+      <p className="max-w-sm text-gray-500">
+        <span className="font-semibold text-gray-700">{host?.name ?? "A friend"}</span> invited you
+        to {view.rated ? "a rated" : "an unrated"} game. {RATED_NOTE[`${view.rated}`]}
+      </p>
+      {view.rated && guest ? (
+        <div className="flex w-full max-w-xs flex-col gap-3">
+          <p className="font-semibold">Sign in to accept: rated games are for signed-in players.</p>
+          <SignInButtons />
+        </div>
+      ) : (
+        <Button disabled={accepting} onClick={accept}>
+          Accept
+        </Button>
+      )}
+    </Message>
+  );
+}
+
+function RatedTag({ rated }: { rated: boolean }) {
+  return (
+    <span
+      className={cn(
+        "rounded-md px-2 py-0.5 text-xs font-semibold tracking-wide uppercase",
+        rated ? "bg-amber-100 text-amber-800" : "bg-neutral-200 text-neutral-600",
+      )}
+    >
+      {rated ? "Rated" : "Unrated"}
+    </span>
   );
 }
 

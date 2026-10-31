@@ -19,7 +19,7 @@ export const PROVIDERS: { id: Provider; name: string }[] = [
 
 /**
  * Signs in with OAuth, coming back to the current page or to `returnTo`; a
- * guest's games and stats carry over to the account.
+ * guest's games carry over to the account.
  */
 export function signInWith(provider: Provider, returnTo?: string) {
   const callbackURL = returnTo

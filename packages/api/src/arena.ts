@@ -56,6 +56,8 @@ export type MatchView = {
   id: string;
   status: "waiting" | "active" | "finished" | "cancelled";
   private: boolean;
+  /** Whether the game counts towards ratings, provided both players are signed in. */
+  rated: boolean;
   /** The viewer's seat, or null for spectators. */
   seat: Player | null;
   players: Record<Player, PlayerView | null>;
@@ -240,6 +242,7 @@ export function createArena({
         id: row.publicId,
         status: row.status,
         private: row.private,
+        rated: row.rated,
         players: { X: seat(row.playerX), O: seat(row.playerO) },
         moves: row.moves,
         winner: row.winner,
@@ -352,8 +355,8 @@ export function createArena({
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`host:${userId}`}, 0))`);
   }
 
-  /** The game this player opened that is still waiting for an opponent, if any. */
-  async function waitingOf(tx: Tx, userId: string, isPrivate: boolean) {
+  /** The game of this kind this player opened that is still waiting for an opponent, if any. */
+  async function waitingOf(tx: Tx, userId: string, isPrivate: boolean, rated: boolean) {
     const [own] = await tx
       .select({ id: gameTable.publicId })
       .from(gameTable)
@@ -361,6 +364,7 @@ export function createArena({
         and(
           eq(gameTable.status, "waiting"),
           eq(gameTable.private, isPrivate),
+          eq(gameTable.rated, rated),
           eq(gameTable.createdBy, userId),
         ),
       )
@@ -368,13 +372,14 @@ export function createArena({
     return own?.id;
   }
 
-  async function create(tx: Tx, userId: string, isPrivate: boolean) {
+  async function create(tx: Tx, userId: string, isPrivate: boolean, rated: boolean) {
     await ensureStats(tx, userId);
     const seat: Player = Math.random() < 0.5 ? "X" : "O";
     const [row] = await tx
       .insert(gameTable)
       .values({
         private: isPrivate,
+        rated,
         createdBy: userId,
         playerX: seat === "X" ? userId : null,
         playerO: seat === "O" ? userId : null,
@@ -396,13 +401,23 @@ export function createArena({
       .where(eq(gameTable.id, row.id));
   }
 
+  async function isGuest(tx: Tx, userId: string) {
+    const [found] = await tx
+      .select({ anonymous: user.isAnonymous })
+      .from(user)
+      .where(eq(user.id, userId));
+    return found?.anonymous ?? false;
+  }
+
   /**
-   * Whether a game counts towards ratings and records: a matchmade game
-   * between two signed-in players that both of them moved in. Friend games,
-   * guests and games resigned before they began can't be used to farm rating.
+   * Whether a game counts towards ratings and records: a rated game between
+   * two signed-in players that both of them moved in. Unrated friend games,
+   * guests, games against yourself and games resigned before they began can't
+   * be used to farm rating.
    */
   async function isRated(tx: Tx, row: GameRow, moves: LoggedMove[]) {
-    if (row.private || moves.length < RATED_MIN_MOVES) return false;
+    if (!row.rated || moves.length < RATED_MIN_MOVES) return false;
+    // Fewer than two players means one sat in both seats, like a guest merged into the account they played.
     const players = await tx
       .select({ anonymous: user.isAnonymous })
       .from(user)
@@ -684,7 +699,7 @@ export function createArena({
     async quickMatch(userId: string): Promise<string> {
       const { id, joined } = await db.transaction(async (tx) => {
         await lockHost(tx, userId);
-        const own = await waitingOf(tx, userId, false);
+        const own = await waitingOf(tx, userId, false, true);
         if (own) return { id: own, joined: false };
 
         const [open] = await tx
@@ -705,7 +720,7 @@ export function createArena({
           await seat(tx, open, userId);
           return { id: open.publicId, joined: true };
         }
-        return { id: await create(tx, userId, false), joined: false };
+        return { id: await create(tx, userId, false, true), joined: false };
       });
       if (joined) await broadcast(id);
       return id;
@@ -713,12 +728,16 @@ export function createArena({
 
     /**
      * Opens a private game that only people with the link can join, or returns
-     * the one this player already has waiting.
+     * the one of the same kind this player already has waiting. Only signed-in
+     * players can open a rated one.
      */
-    async invite(userId: string): Promise<string> {
+    async invite(userId: string, rated = false): Promise<string> {
       return db.transaction(async (tx) => {
+        if (rated && (await isGuest(tx, userId))) {
+          throw new ORPCError("FORBIDDEN", { message: "Sign in to play rated games" });
+        }
         await lockHost(tx, userId);
-        return (await waitingOf(tx, userId, true)) ?? create(tx, userId, true);
+        return (await waitingOf(tx, userId, true, rated)) ?? create(tx, userId, true, rated);
       });
     },
 
@@ -728,6 +747,9 @@ export function createArena({
         if (seatOf(row, userId)) return false;
         if (row.status !== "waiting") {
           throw new ORPCError("CONFLICT", { message: "This game already has two players" });
+        }
+        if (row.private && row.rated && (await isGuest(tx, userId))) {
+          throw new ORPCError("FORBIDDEN", { message: "Sign in to accept a rated game" });
         }
         await seat(tx, row, userId);
         return true;
@@ -799,6 +821,7 @@ export function createArena({
             status: "active",
             startedAt: new Date(),
             private: row.private,
+            rated: row.rated,
             createdBy: userId,
             playerX: row.playerO,
             playerO: row.playerX,
@@ -1023,8 +1046,9 @@ export function createArena({
     },
 
     /**
-     * Moves an anonymous player's games and record onto the account they
-     * signed in with, before the anonymous user is deleted.
+     * Moves an anonymous player's games onto the account they signed in with,
+     * before the anonymous user is deleted. Their rating and record stay
+     * behind: a guest's games are never rated, but some from before were.
      */
     async mergePlayers(fromId: string, toId: string) {
       if (fromId === toId) return;
@@ -1035,30 +1059,7 @@ export function createArena({
             .set({ [column]: toId })
             .where(eq(gameTable[column], fromId));
         }
-        const [from] = await tx
-          .delete(playerStats)
-          .where(eq(playerStats.userId, fromId))
-          .returning();
-        if (!from) return;
-        await tx
-          .insert(playerStats)
-          .values({
-            userId: toId,
-            rating: from.rating,
-            wins: from.wins,
-            losses: from.losses,
-            draws: from.draws,
-          })
-          .onConflictDoUpdate({
-            target: playerStats.userId,
-            set: {
-              // Keep the account's rating and add what the guest gained or lost.
-              rating: sql`${playerStats.rating} + ${from.rating - 1000}`,
-              wins: sql`${playerStats.wins} + ${from.wins}`,
-              losses: sql`${playerStats.losses} + ${from.losses}`,
-              draws: sql`${playerStats.draws} + ${from.draws}`,
-            },
-          });
+        await tx.delete(playerStats).where(eq(playerStats.userId, fromId));
       });
     },
   };

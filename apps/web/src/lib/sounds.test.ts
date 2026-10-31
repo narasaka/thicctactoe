@@ -46,6 +46,7 @@ const view = (patch: Partial<MatchView>): MatchView => ({
   id: "g",
   status: "active",
   private: false,
+  rated: true,
   seat: "X",
   players: { X: null, O: null },
   moves: [],
