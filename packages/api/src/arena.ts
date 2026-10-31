@@ -1060,6 +1060,8 @@ export function createArena({
             .where(eq(gameTable[column], fromId));
         }
         await tx.delete(playerStats).where(eq(playerStats.userId, fromId));
+        // A game still in progress can be rated now, and finishing it updates existing stats.
+        await ensureStats(tx, toId);
       });
     },
   };

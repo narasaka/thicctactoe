@@ -641,6 +641,20 @@ describe("mergePlayers", () => {
     expect(await statsOf(account)).toMatchObject({ rating: 1016, wins: 1, losses: 0 });
     expect(await db.query.playerStats.findFirst({ where: { userId: X } })).toBeUndefined();
   });
+
+  test("a guest who signs in mid-game with a new account gets rated for it", async () => {
+    const started = await match(await addUser("guest", true), await addUser("rival"));
+    const account = await addUser("account");
+    await arena.mergePlayers("guest", account);
+    const seats = {
+      id: started.id,
+      X: started.X === "guest" ? account : started.X,
+      O: started.O === "guest" ? account : started.O,
+    };
+    await opening(seats);
+    await arena.resign(started.id, "rival");
+    expect(await statsOf(account)).toMatchObject({ rating: 1016, wins: 1 });
+  });
 });
 
 describe("abandoned games", () => {
