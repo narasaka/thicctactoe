@@ -42,6 +42,15 @@ export function createAuth(env: AuthConfig, database: Database, hooks: AuthHooks
     trustedOrigins: [env.CORS_ORIGIN],
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
+    rateLimit: {
+      // Kept in Postgres, so every server instance counts the same requests.
+      enabled: true,
+      storage: "database",
+      customRules: {
+        // Every new guest also gets a generated avatar, so they are worth more than a sign-in.
+        "/sign-in/anonymous": { window: 60 * 60, max: 30 },
+      },
+    },
     advanced: {
       // Railway's edge sets X-Real-IP to the client's address, replacing any
       // the client sent. Its X-Forwarded-For has a second, edge hop, which
