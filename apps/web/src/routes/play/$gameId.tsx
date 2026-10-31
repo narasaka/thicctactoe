@@ -183,13 +183,11 @@ function useFollowRematch(view: MatchView | null) {
 
 /**
  * Moves a player who is playing the bot on to their match as soon as someone
- * joins it. Opening an old bot game whose match was found long ago stays put.
+ * joins it, for as long as that match is on.
  */
 function useFollowSearch(view: MatchView | null) {
   const navigate = useNavigate();
-  const [watched, setWatched] = useState(false);
-  if (view?.search?.found === false && !watched) setWatched(true);
-  const next = watched && view?.search?.found ? view.search.id : null;
+  const next = view?.search?.found ? view.search.id : null;
 
   useEffect(() => {
     if (!next) return;

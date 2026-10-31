@@ -1008,14 +1008,20 @@ describe("bot games", () => {
     await expect(arena.playBot(search, host)).rejects.toThrow("already started");
   });
 
-  test("a finished bot game learns that the match was found, and its rematch stops waiting", async () => {
+  test("a finished bot game learns that the match was found, and offers no rematch meanwhile", async () => {
     const { host, search, id } = await waitWithBot();
     await arena.resign(id, host);
-    await arena.join(search, await addUser("rival"));
+    const rival = await addUser("rival");
+    await arena.join(search, rival);
     expect(await arena.view(id, host)).toMatchObject({
       status: "finished",
       search: { id: search, found: true },
     });
+    await expect(arena.rematch(id, host)).rejects.toThrow("match has been found");
+
+    // Once the match is over, the bot game no longer points to it, and the bot plays again.
+    await arena.resign(search, rival);
+    expect((await arena.view(id, host)).search).toBeNull();
     const { rematchId } = await arena.rematch(id, host);
     expect((await arena.view(rematchId!, host)).search).toBeNull();
   });

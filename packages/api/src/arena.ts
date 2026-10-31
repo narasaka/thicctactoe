@@ -83,8 +83,8 @@ export type MatchView = {
   rematchId: string | null;
   /**
    * For the player in a game against the bot: the public game they are still
-   * waiting in for a match, and whether someone has joined it. Null for
-   * everyone else, and once that game is cancelled.
+   * waiting in for a match, and whether someone has joined it and it is on.
+   * Null for everyone else, and once that game is over or cancelled.
    */
   search: { id: string; found: boolean } | null;
   startedAt: Date | null;
@@ -311,8 +311,8 @@ export function createArena({
       .select({ status: gameTable.status })
       .from(gameTable)
       .where(eq(gameTable.publicId, searchId));
-    if (!found || found.status === "cancelled") return null;
-    return { id: searchId, found: found.status !== "waiting" };
+    if (found?.status !== "waiting" && found?.status !== "active") return null;
+    return { id: searchId, found: found.status === "active" };
   }
 
   function forViewer({ view, seats, search }: Snapshot, viewerId: string | null): MatchView {
@@ -484,14 +484,14 @@ export function createArena({
     );
   }
 
-  /** Whether the public game a player waits in still waits, holding it that way until `tx` ends. */
-  async function stillSearching(tx: Tx, searchId: string) {
+  /** The status of the public game a player waits in, held that way until `tx` ends. */
+  async function searchStatus(tx: Tx, searchId: string) {
     await lockSearch(tx, searchId);
     const [found] = await tx
       .select({ status: gameTable.status })
       .from(gameTable)
       .where(eq(gameTable.publicId, searchId));
-    return found?.status === "waiting";
+    return found?.status;
   }
 
   async function ensureBot(tx: Tx) {
@@ -1088,8 +1088,11 @@ export function createArena({
         }
         if (isBotGame(row)) {
           // The bot always accepts, and keeps waiting with its opponent if they still are.
-          const searchId = row.searchId && (await stillSearching(tx, row.searchId));
-          const next = await openBotGame(tx, userId, searchId ? row.searchId : null);
+          const search = row.searchId && (await searchStatus(tx, row.searchId));
+          if (search === "active") {
+            throw new ORPCError("CONFLICT", { message: "Your match has been found" });
+          }
+          const next = await openBotGame(tx, userId, search === "waiting" ? row.searchId : null);
           await tx.update(gameTable).set({ rematchId: next }).where(eq(gameTable.id, row.id));
           return;
         }
