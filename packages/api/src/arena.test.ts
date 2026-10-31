@@ -575,7 +575,7 @@ describe("abandoned games", () => {
   });
 });
 
-describe("abandoned games", () => {
+describe("games left mid-play", () => {
   test("a game is lost by the player to move once they have been gone a while", async () => {
     const leaving = start({ forfeitAfterMs: 20 });
     const started = await startGame();
@@ -597,17 +597,36 @@ describe("abandoned games", () => {
   });
 
   test("a game survives while the player to move is watching, or has only just left", async () => {
-    const leaving = start({ forfeitAfterMs: 20 });
+    const leaving = start({ forfeitAfterMs: 500 });
     const started = await startGame();
     const watched = leaving.watch(started.id, started.X);
     await watched.next();
-    await Bun.sleep(50);
+    await Bun.sleep(550);
     await leaving.sweep();
     expect((await leaving.view(started.id, null)).status).toBe("active");
 
     await watched.return(undefined);
     await leaving.sweep();
     expect((await leaving.view(started.id, null)).status).toBe("active");
+  });
+
+  test("a game survives an instance that stalled while its player kept watching", async () => {
+    const owner = start();
+    const started = await startGame();
+    await opening(started);
+    const watched = owner.watch(started.id, started.X);
+    await watched.next();
+    // The owner misses its heartbeats long enough for another instance to take X for gone...
+    await Bun.sleep(50);
+    await start({ staleMs: 20 }).sweep();
+    expect((await owner.view(started.id, null)).players.X?.online).toBe(false);
+    // ...then recovers, with X's stream still open.
+    await owner.sweep();
+    expect((await owner.view(started.id, null)).players.X?.online).toBe(true);
+    await Bun.sleep(150);
+    await start({ forfeitAfterMs: 100 }).sweep();
+    expect((await owner.view(started.id, null)).status).toBe("active");
+    await watched.return(undefined);
   });
 
   test("a game left before both players moved ends unrated", async () => {

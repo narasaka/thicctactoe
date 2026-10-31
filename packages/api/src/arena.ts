@@ -486,12 +486,7 @@ export function createArena({
    * games nobody played are eventually deleted.
    */
   async function sweep() {
-    if (connections.size) {
-      await db
-        .update(presence)
-        .set({ seenAt: sql`now()` })
-        .where(inArray(presence.id, [...connections]));
-    }
+    const back = await refresh();
     const lost = await db
       .update(presence)
       .set({ leftAt: sql`${presence.seenAt}` })
@@ -533,7 +528,29 @@ export function createArena({
           lt(gameTable.createdAt, ago(unplayedRetentionMs)),
         ),
       );
-    await broadcastAll([...lost, ...abandoned, ...forfeited]);
+    await broadcastAll([...back, ...lost, ...abandoned, ...forfeited]);
+  }
+
+  /**
+   * Refreshes this instance's presence. If it stalled for long enough that
+   * another instance took its players for gone, their streams are still open,
+   * so they are back.
+   */
+  async function refresh() {
+    const ids = [...connections];
+    if (!ids.length) return [];
+    await db
+      .update(presence)
+      .set({ seenAt: sql`now()` })
+      .where(and(inArray(presence.id, ids), isNull(presence.leftAt)));
+    const back = await db
+      .update(presence)
+      .set({ seenAt: sql`now()`, leftAt: null })
+      .where(and(inArray(presence.id, ids), isNotNull(presence.leftAt)))
+      .returning({ gameId: presence.gameId });
+    // A stream that closed meanwhile stays gone.
+    const closed = await disconnect(ids.filter((id) => !connections.has(id)));
+    return [...back, ...closed];
   }
 
   /** Ends the active games that have stalled because the player to move left. */
@@ -548,33 +565,39 @@ export function createArena({
       .where(stalled);
     const forfeited: { gameId: string }[] = [];
     for (const { gameId } of candidates) {
-      const ended = await db.transaction(async (tx) => {
-        // Checked again under the lock, in case a move or another instance got there first.
-        const [row] = await tx
-          .select()
-          .from(gameTable)
-          .where(and(eq(gameTable.publicId, gameId), stalled))
-          .for("update");
-        if (!row) return false;
-        const absent = replay(row.moves).turn;
-        const userId = row[`player${absent}`];
-        if (userId) {
-          const [seen] = await tx
-            .select({ id: presence.id })
-            .from(presence)
-            .where(
-              and(
-                eq(presence.gameId, gameId),
-                eq(presence.userId, userId),
-                or(isNull(presence.leftAt), gt(presence.leftAt, ago(forfeitAfterMs))),
-              ),
-            )
-            .limit(1);
-          if (seen) return false;
-        }
-        await finish(tx, row, other(absent), "abandon");
-        return true;
-      });
+      const ended = await db
+        .transaction(async (tx) => {
+          // Checked again under the lock, in case a move or another instance got there first.
+          const [row] = await tx
+            .select()
+            .from(gameTable)
+            .where(and(eq(gameTable.publicId, gameId), stalled))
+            .for("update");
+          if (!row) return false;
+          const absent = replay(row.moves).turn;
+          const userId = row[`player${absent}`];
+          if (userId) {
+            const [seen] = await tx
+              .select({ id: presence.id })
+              .from(presence)
+              .where(
+                and(
+                  eq(presence.gameId, gameId),
+                  eq(presence.userId, userId),
+                  or(isNull(presence.leftAt), gt(presence.leftAt, ago(forfeitAfterMs))),
+                ),
+              )
+              .limit(1);
+            if (seen) return false;
+          }
+          await finish(tx, row, other(absent), "abandon");
+          return true;
+        })
+        // One game failing must not hold up the rest of the sweep.
+        .catch((error) => {
+          console.error("forfeit failed", gameId, error);
+          return false;
+        });
       if (ended) forfeited.push({ gameId });
     }
     return forfeited;
