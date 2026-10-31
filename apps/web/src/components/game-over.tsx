@@ -63,7 +63,7 @@ function ratingCapNote(view: MatchView) {
     view.ratingDelta === null ? "This game is unrated." : "This game counted for less than usual.";
   return {
     title: `Rating capped: ${who}`,
-    detail: `${effect} One player can gain at most ${PAIR_RATING_CAP} rating, net, from the same opponent in any 24 hours.`,
+    detail: `${effect} One player can gain at most ${PAIR_RATING_CAP} rating, net, from the same opponent over the past 24 hours.`,
   };
 }
 
