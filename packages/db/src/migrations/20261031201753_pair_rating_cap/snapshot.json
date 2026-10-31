@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "da9f9017-2605-4c74-b220-ce97f8a503b6",
-  "prevIds": ["5468f2a9-667a-41ce-a571-fd8bc0111019", "cc14b643-ff32-49be-9772-f22ed3344b8f"],
+  "id": "332ac96c-3b01-4276-842a-84704e6f2266",
+  "prevIds": ["310af9bf-b93e-4047-8d84-545fdcc266b0"],
   "ddl": [
     {
       "values": ["line", "draw", "resign", "abandon"],
@@ -654,6 +654,19 @@
       "generated": null,
       "identity": null,
       "name": "private",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "game"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "rated",
       "entityType": "columns",
       "schema": "public",
       "table": "game"
