@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { PAIR_RATING_CAP } from "@thicctactoe/api/rating";
 import { PLAYERS, type Player, other } from "@thicctactoe/game";
 import {
   Dialog,
@@ -50,7 +51,20 @@ export function gameResult(view: MatchView) {
           : "Three in a row";
   // Unrated friend games, guests' games and games resigned before they began.
   const reason = view.ratingDelta === null ? `${ending} · Unrated` : ending;
-  return { headline, reason };
+  return { headline, reason: view.ratingCapped ? `${ending} · Rating capped` : reason };
+}
+
+/** Why the game moved less rating than usual, or none, when the cap between two players kicked in. */
+function ratingCapNote(view: MatchView) {
+  const who = view.seat
+    ? "you've played this opponent a lot today"
+    : "these players have played each other a lot today";
+  const effect =
+    view.ratingDelta === null ? "This game is unrated." : "This game counted for less than usual.";
+  return {
+    title: `Rating capped: ${who}`,
+    detail: `${effect} One player can gain at most ${PAIR_RATING_CAP} rating, net, from the same opponent over the past 24 hours.`,
+  };
 }
 
 /**
@@ -186,6 +200,7 @@ export default function GameOverDialog({
             </div>
           ))}
         </div>
+        {view.ratingCapped && <RatingCapNote view={view} />}
         <div className="p-6 short:p-4">
           <GameOverActions view={view} rematch={rematch} variant="dialog" />
         </div>
@@ -210,6 +225,16 @@ export default function GameOverDialog({
         </DialogClose>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RatingCapNote({ view }: { view: MatchView }) {
+  const { title, detail } = ratingCapNote(view);
+  return (
+    <div className="mx-6 mt-5 rounded-lg bg-amber-50 px-4 py-3 text-center text-sm short:mt-3 short:py-2">
+      <p className="font-semibold text-amber-900">{title}</p>
+      <p className="mt-0.5 text-amber-800">{detail}</p>
+    </div>
   );
 }
 

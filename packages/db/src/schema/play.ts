@@ -42,6 +42,8 @@ export const game = pgTable(
     winner: text("winner").$type<Player>(),
     endReason: gameEndReason("end_reason"),
     ratingDelta: jsonb("rating_delta").$type<Record<Player, number>>(),
+    /** The cap on rating moving between the same two players cut this game's change short. */
+    ratingCapped: boolean("rating_capped").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

@@ -1,0 +1,1 @@
+ALTER TABLE "game" ADD COLUMN "rating_capped" boolean DEFAULT false NOT NULL;

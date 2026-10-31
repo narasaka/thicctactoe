@@ -11,6 +11,7 @@ import { call } from "@orpc/server";
 import { type Arena, type ArenaOptions, type MatchView, createArena } from "./arena";
 import type { Context } from "./context";
 import { type Limits, createLimits } from "./limits";
+import { PAIR_RATING_CAP, ratingChange } from "./rating";
 import { appRouter } from "./routers/index";
 
 // Needs Postgres, e.g. `docker compose up -d`. The schema is wiped on every run.
@@ -273,6 +274,114 @@ describe("rated games", () => {
     await arena.move(id, X, { player: "X", size: "small", cell: 4 });
     expect(await arena.resign(id, O)).toMatchObject({ winner: "X", ratingDelta: null });
     expect(await statsOf(X)).toMatchObject({ rating: 1000, wins: 0 });
+  });
+});
+
+describe("rating cap between two players", () => {
+  /** Plays a rated game that `winner` wins; returns it and what the winner gained. */
+  async function beat(winner: string, loser: string) {
+    const started = await match(winner, loser);
+    await opening(started);
+    const game = await arena.resign(started.id, loser);
+    return { game, gained: game.ratingDelta && -game.ratingDelta[game.seat!] };
+  }
+
+  /** Players have no stats until their first game. */
+  const ratingOf = async (userId: string) =>
+    (await db.query.playerStats.findFirst({ where: { userId } }))?.rating ?? 1000;
+
+  /** What `winner` would gain at full value for beating `loser` now. */
+  const fullGain = async (winner: string, loser: string) =>
+    ratingChange(await ratingOf(winner), await ratingOf(loser), 1);
+
+  /** Has `winner` beat `loser` until the cap stops them; returns what they gained. */
+  async function streak(winner: string, loser: string) {
+    const gains: number[] = [];
+    for (let i = 0; i < 30; i++) {
+      const full = await fullGain(winner, loser);
+      const { game, gained } = await beat(winner, loser);
+      if (game.ratingCapped) return { gains, partial: gained!, full };
+      gains.push(gained!);
+    }
+    throw new Error("the cap never kicked in");
+  }
+
+  test("a pair trading wins back and forth never hits the cap", async () => {
+    const [a, b] = [await addUser("a"), await addUser("b")];
+    let moved = 0;
+    for (let i = 0; i < 20; i++) {
+      const [winner, loser] = i % 2 ? [b, a] : [a, b];
+      const full = await fullGain(winner, loser);
+      const { game, gained } = await beat(winner, loser);
+      expect(game.ratingCapped).toBe(false);
+      expect(gained).toBe(full);
+      moved += full;
+    }
+    // Far more than the cap changed hands; only the net is limited.
+    expect(moved).toBeGreaterThan(PAIR_RATING_CAP * 2);
+    expect(await statsOf(a)).toMatchObject({ wins: 10, losses: 10 });
+  });
+
+  test("a one-sided streak gets a partial change, then becomes unrated", async () => {
+    const [a, b] = [await addUser("a"), await addUser("b")];
+    const { gains, partial, full } = await streak(a, b);
+    expect(partial).toBeGreaterThan(0);
+    expect(partial).toBeLessThan(full);
+    expect(gains.reduce((sum, gain) => sum + gain, partial)).toBe(PAIR_RATING_CAP);
+    const before = [await statsOf(a), await statsOf(b)];
+    expect(before[0]).toMatchObject({ rating: 1000 + PAIR_RATING_CAP, wins: gains.length + 1 });
+
+    const { game } = await beat(a, b);
+    expect(game).toMatchObject({ ratingDelta: null, ratingCapped: true });
+    expect([await statsOf(a), await statsOf(b)]).toEqual(before);
+    // Their games with anyone else still count in full.
+    const { game: other, gained } = await beat(a, await addUser("c"));
+    expect(other.ratingCapped).toBe(false);
+    expect(gained).toBeGreaterThan(0);
+  });
+
+  test("the loser can win points back after the cap is hit", async () => {
+    const [a, b] = [await addUser("a"), await addUser("b")];
+    await streak(a, b);
+    const full = await fullGain(b, a);
+    const { game, gained } = await beat(b, a);
+    expect(game.ratingCapped).toBe(false);
+    expect(gained).toBe(full);
+    expect((await statsOf(b)).rating).toBe(1000 - PAIR_RATING_CAP + full);
+    // Which frees up as much for the winner of the streak.
+    const room = Math.min(await fullGain(a, b), full);
+    expect((await beat(a, b)).gained).toBe(room);
+  });
+
+  test("games older than 24 hours drop out of the window", async () => {
+    const [a, b] = [await addUser("a"), await addUser("b")];
+    await streak(a, b);
+    const day = 24 * 60 * 60_000;
+    await db.update(gameTable).set({ finishedAt: new Date(Date.now() - day - 60_000) });
+    const full = await fullGain(a, b);
+    const { game, gained } = await beat(a, b);
+    expect(game.ratingCapped).toBe(false);
+    expect(gained).toBe(full);
+  });
+
+  test("games between the pair finishing at once share what is left", async () => {
+    const [a, b] = [await addUser("a"), await addUser("b")];
+    // a has already taken all but a few points from b today.
+    await db.insert(gameTable).values({
+      status: "finished",
+      playerX: b,
+      playerO: a,
+      winner: "O",
+      endReason: "resign",
+      ratingDelta: { X: -(PAIR_RATING_CAP - 4), O: PAIR_RATING_CAP - 4 },
+      finishedAt: new Date(),
+    });
+    const games = [await match(a, b), await match(a, b), await match(b, a), await match(b, a)];
+    for (const game of games) await opening(game);
+    const instances = [arena, start(), start(), start()];
+    await Promise.all(games.map((game, i) => instances[i]!.resign(game.id, b)));
+    expect((await statsOf(a)).rating).toBe(1004);
+    expect((await statsOf(b)).rating).toBe(996);
   });
 });
 
