@@ -25,7 +25,7 @@ import {
 } from "drizzle-orm";
 import type { PoolClient } from "pg";
 
-import { ratingChange } from "./rating";
+import { PAIR_RATING_WINDOW_MS, capPairChange, ratingChange } from "./rating";
 
 export type { LoggedMove };
 
@@ -66,6 +66,11 @@ export type MatchView = {
   endReason: "line" | "draw" | "resign" | "abandon" | null;
   /** Rating changes once a rated game is over; null until then, and for unrated games. */
   ratingDelta: Record<Player, number> | null;
+  /**
+   * Whether the players have moved so much rating between them lately that
+   * this game's change was cut short, or left the game unrated.
+   */
+  ratingCapped: boolean;
   /** The seat that offered a rematch, while the other has not accepted. */
   rematchOffer: Player | null;
   /** Public id of the rematch, once both players agreed to it. */
@@ -248,6 +253,7 @@ export function createArena({
         winner: row.winner,
         endReason: row.endReason,
         ratingDelta: row.ratingDelta,
+        ratingCapped: row.ratingCapped,
         rematchOffer: row.rematchOffer,
         rematchId: row.rematchId,
         startedAt: row.startedAt,
@@ -425,9 +431,30 @@ export function createArena({
     return players.length === 2 && players.every((player) => !player.anonymous);
   }
 
+  /** The rating `userId` has gained from `opponentId`, net, within the cap's window. */
+  async function gainedFrom(tx: Tx, userId: string, opponentId: string) {
+    const gain = sql`case when ${gameTable.playerX} = ${userId} then (${gameTable.ratingDelta} ->> 'X')::int else (${gameTable.ratingDelta} ->> 'O')::int end`;
+    const [row] = await tx
+      .select({ gained: sql<number>`coalesce(sum(${gain}), 0)`.mapWith(Number) })
+      .from(gameTable)
+      .where(
+        and(
+          eq(gameTable.status, "finished"),
+          isNotNull(gameTable.ratingDelta),
+          gt(gameTable.finishedAt, new Date(Date.now() - PAIR_RATING_WINDOW_MS)),
+          or(
+            and(eq(gameTable.playerX, userId), eq(gameTable.playerO, opponentId)),
+            and(eq(gameTable.playerX, opponentId), eq(gameTable.playerO, userId)),
+          ),
+        ),
+      );
+    return row!.gained;
+  }
+
   /**
    * Ends the game and, if it is rated, applies rating changes and records the
-   * result. `winner` null means a draw.
+   * result. `winner` null means a draw. How much rating can move between the
+   * same two players is capped; a game with nothing left to move is unrated.
    */
   async function finish(
     tx: Tx,
@@ -437,37 +464,54 @@ export function createArena({
     moves: LoggedMove[] = row.moves,
   ) {
     let ratingDelta: Record<Player, number> | null = null;
+    let ratingCapped = false;
     if (await isRated(tx, row, moves)) {
       const x = row.playerX!;
       const o = row.playerO!;
+      // Locked in a fixed order, so games between the same two players that
+      // finish at once queue up here, and each reads their history below only
+      // once the one before it has committed.
       const stats = await tx
         .select()
         .from(playerStats)
         .where(inArray(playerStats.userId, [x, o]))
+        .orderBy(asc(playerStats.userId))
         .for("update");
       const ratingOf = (id: string) => stats.find((s) => s.userId === id)?.rating ?? 1000;
       const scoreX = winner === "X" ? 1 : winner === "O" ? 0 : 0.5;
-      const deltaX = ratingChange(ratingOf(x), ratingOf(o), scoreX);
-      ratingDelta = { X: deltaX, O: -deltaX };
-
-      for (const [player, id] of [
-        ["X", x],
-        ["O", o],
-      ] as const) {
-        const result = winner === null ? "draws" : winner === player ? "wins" : "losses";
-        await tx
-          .update(playerStats)
-          .set({
-            rating: sql`${playerStats.rating} + ${ratingDelta[player]}`,
-            [result]: sql`${playerStats[result]} + 1`,
-          })
-          .where(eq(playerStats.userId, id));
+      const full = ratingChange(ratingOf(x), ratingOf(o), scoreX);
+      const deltaX = capPairChange(full, await gainedFrom(tx, x, o));
+      ratingCapped = deltaX !== full;
+      // With nothing left to move under the cap, the game is unrated.
+      if (deltaX !== 0 || !ratingCapped) {
+        ratingDelta = { X: deltaX, O: -deltaX };
+        for (const [player, id] of [
+          ["X", x],
+          ["O", o],
+        ] as const) {
+          const result = winner === null ? "draws" : winner === player ? "wins" : "losses";
+          await tx
+            .update(playerStats)
+            .set({
+              rating: sql`${playerStats.rating} + ${ratingDelta[player]}`,
+              [result]: sql`${playerStats[result]} + 1`,
+            })
+            .where(eq(playerStats.userId, id));
+        }
       }
     }
 
     await tx
       .update(gameTable)
-      .set({ status: "finished", moves, winner, endReason, ratingDelta, finishedAt: new Date() })
+      .set({
+        status: "finished",
+        moves,
+        winner,
+        endReason,
+        ratingDelta,
+        ratingCapped,
+        finishedAt: new Date(),
+      })
       .where(eq(gameTable.id, row.id));
   }
 
