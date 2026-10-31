@@ -61,7 +61,7 @@ export type MatchView = {
   players: Record<Player, PlayerView | null>;
   moves: LoggedMove[];
   winner: Player | null;
-  endReason: "line" | "draw" | "resign" | null;
+  endReason: "line" | "draw" | "resign" | "abandon" | null;
   /** Rating changes once a rated game is over; null until then, and for unrated games. */
   ratingDelta: Record<Player, number> | null;
   /** The seat that offered a rematch, while the other has not accepted. */
@@ -81,7 +81,7 @@ export type HistoryEntry = {
   /** Null if the opponent's account has since been deleted. */
   opponent: Pick<PlayerView, "id" | "name" | "image" | "anonymous"> | null;
   result: "win" | "loss" | "draw";
-  endReason: "line" | "draw" | "resign";
+  endReason: "line" | "draw" | "resign" | "abandon";
   /** Null for unrated games. */
   ratingDelta: number | null;
   moveCount: number;
@@ -152,6 +152,11 @@ export type ArenaOptions = {
   staleMs?: number;
   /** Cancelled games nobody played are deleted this long after they were opened. */
   unplayedRetentionMs?: number;
+  /**
+   * An active game nobody has moved in for this long is lost by the player to
+   * move, if they have been gone this long too.
+   */
+  forfeitAfterMs?: number;
 };
 
 export function createArena({
@@ -161,12 +166,13 @@ export function createArena({
   heartbeatMs = 5_000,
   staleMs = 20_000,
   unplayedRetentionMs = 24 * 60 * 60_000,
+  forfeitAfterMs = 2 * 60_000,
 }: ArenaOptions) {
   const publisher = new EventPublisher<Record<string, Snapshot>>();
   /** gameId -> open watch streams on this instance */
   const watching = new Map<string, number>();
-  /** Presence rows of this instance's watch streams. */
-  const connections = new Set<string>();
+  /** Presence rows of this instance's watch streams, by id. */
+  const connections = new Map<string, { gameId: string; userId: string }>();
   /** gameId -> pending delivery, so snapshots go out in the order they were read */
   const deliveries = new Map<string, Promise<void>>();
   const closing = new AbortController();
@@ -412,7 +418,7 @@ export function createArena({
     tx: Tx,
     row: GameRow,
     winner: Player | null,
-    endReason: "line" | "draw" | "resign",
+    endReason: "line" | "draw" | "resign" | "abandon",
     moves: LoggedMove[] = row.moves,
   ) {
     let ratingDelta: Record<Player, number> | null = null;
@@ -454,7 +460,7 @@ export function createArena({
   async function connect(gameId: string, userId: string) {
     const id = crypto.randomUUID();
     await db.insert(presence).values({ id, gameId, userId });
-    connections.add(id);
+    connections.set(id, { gameId, userId });
     return id;
   }
 
@@ -475,16 +481,12 @@ export function createArena({
   /**
    * Refreshes this instance's presence, then cleans up after every instance:
    * players whose instance died go offline, a waiting game nobody has watched
-   * for a while is cancelled, since it would strand whoever joins it, and
-   * cancelled games nobody played are eventually deleted.
+   * for a while is cancelled, since it would strand whoever joins it, an
+   * active game whose player to move has left is lost by them, and cancelled
+   * games nobody played are eventually deleted.
    */
   async function sweep() {
-    if (connections.size) {
-      await db
-        .update(presence)
-        .set({ seenAt: sql`now()` })
-        .where(inArray(presence.id, [...connections]));
-    }
+    const back = await refresh();
     const lost = await db
       .update(presence)
       .set({ leftAt: sql`${presence.seenAt}` })
@@ -511,7 +513,11 @@ export function createArena({
         ),
       )
       .returning({ gameId: gameTable.publicId });
-    await db.delete(presence).where(lt(presence.leftAt, ago(abandonGraceMs)));
+    const forfeited = await forfeitAbandoned();
+    // Kept long enough to tell how long a player has been gone.
+    await db
+      .delete(presence)
+      .where(lt(presence.leftAt, ago(Math.max(abandonGraceMs, forfeitAfterMs))));
     // Nobody played them, so nothing about them is worth keeping.
     await db
       .delete(gameTable)
@@ -522,7 +528,94 @@ export function createArena({
           lt(gameTable.createdAt, ago(unplayedRetentionMs)),
         ),
       );
-    await broadcastAll([...lost, ...abandoned]);
+    await broadcastAll([...back, ...lost, ...abandoned, ...forfeited]);
+  }
+
+  /**
+   * Refreshes this instance's presence. If it stalled for long enough that
+   * another instance took its players for gone, or even swept their rows up,
+   * their streams are still open, so they are back.
+   */
+  async function refresh() {
+    const ids = [...connections.keys()];
+    if (!ids.length) return [];
+    const seen = await db
+      .update(presence)
+      .set({ seenAt: sql`now()` })
+      .where(and(inArray(presence.id, ids), isNull(presence.leftAt)))
+      .returning({ id: presence.id });
+    const back = await db
+      .update(presence)
+      .set({ seenAt: sql`now()`, leftAt: null })
+      .where(and(inArray(presence.id, ids), isNotNull(presence.leftAt)))
+      .returning({ id: presence.id, gameId: presence.gameId });
+    const found = new Set([...seen, ...back].map((row) => row.id));
+    for (const id of ids) {
+      const live = connections.get(id);
+      if (found.has(id) || !live) continue;
+      await db
+        .insert(presence)
+        .values({ id, ...live })
+        .onConflictDoNothing()
+        .then(
+          () => back.push({ id, gameId: live.gameId }),
+          // Its game or player is gone too.
+          (error) => console.error("presence restore failed", error),
+        );
+    }
+    // A stream that closed meanwhile stays gone.
+    const closed = await disconnect(ids.filter((id) => !connections.has(id)));
+    return [...back, ...closed];
+  }
+
+  /** Ends the active games that have stalled because the player to move left. */
+  async function forfeitAbandoned() {
+    const stalled = and(
+      eq(gameTable.status, "active"),
+      lt(gameTable.updatedAt, ago(forfeitAfterMs)),
+    );
+    const candidates = await db
+      .select({ gameId: gameTable.publicId })
+      .from(gameTable)
+      .where(stalled);
+    const forfeited: { gameId: string }[] = [];
+    for (const { gameId } of candidates) {
+      const ended = await db
+        .transaction(async (tx) => {
+          // Checked again under the lock, in case a move or another instance got there first.
+          const [row] = await tx
+            .select()
+            .from(gameTable)
+            .where(and(eq(gameTable.publicId, gameId), stalled))
+            .for("update");
+          if (!row) return false;
+          const absent = replay(row.moves).turn;
+          const userId = row[`player${absent}`];
+          if (userId) {
+            const [seen] = await tx
+              .select({ id: presence.id })
+              .from(presence)
+              .where(
+                and(
+                  eq(presence.gameId, gameId),
+                  eq(presence.userId, userId),
+                  or(isNull(presence.leftAt), gt(presence.leftAt, ago(forfeitAfterMs))),
+                ),
+              )
+              .limit(1);
+            if (seen) return false;
+          }
+          await finish(tx, row, other(absent), "abandon");
+          return true;
+        })
+        // One game failing must not hold up the rest of the sweep.
+        .catch((error) => {
+          console.error("forfeit failed", gameId, error);
+          return false;
+        });
+      if (ended) forfeited.push({ gameId });
+    }
+    return forfeited;
   }
 
   /** The internal id of the player with this public id. */
@@ -784,7 +877,7 @@ export function createArena({
       closing.abort();
       clearInterval(heartbeat);
       listener.stop();
-      await broadcastAll(await disconnect([...connections]));
+      await broadcastAll(await disconnect([...connections.keys()]));
     },
 
     /** A player's record and rating trend, by public id. */

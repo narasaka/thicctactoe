@@ -67,6 +67,8 @@ test("a resignation sounds like the result", () => {
   const resigned = (winner: "X" | "O") => view({ status: "finished", endReason: "resign", winner });
   expect(matchSound(view({}), resigned("X"))).toEqual({ type: "win" });
   expect(matchSound(view({}), resigned("O"))).toEqual({ type: "lose" });
+  const left = view({ status: "finished", endReason: "abandon", winner: "O" });
+  expect(matchSound(view({}), left)).toEqual({ type: "lose" });
 });
 
 test("a game ending on the board is left to the board", () => {

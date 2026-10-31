@@ -32,12 +32,13 @@ export function moveSounds(before: Game, after: Game, seats: readonly Player[]):
 
 /**
  * What to play for a change to an online game that does not show on the
- * board: an opponent arriving, or someone resigning.
+ * board: an opponent arriving, or someone resigning or leaving.
  */
 export function matchSound(before: MatchView, after: MatchView): Sound | null {
   if (before.id !== after.id) return null;
   if (before.status === "waiting" && after.status === "active") return { type: "start" };
-  if (before.status === "active" && after.status === "finished" && after.endReason === "resign") {
+  const offBoard = after.endReason === "resign" || after.endReason === "abandon";
+  if (before.status === "active" && after.status === "finished" && offBoard) {
     return resultSound(after.winner, after.seat ? [after.seat] : []);
   }
   return null;

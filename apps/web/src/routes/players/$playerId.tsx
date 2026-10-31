@@ -209,16 +209,17 @@ function Games({ profile, you }: { profile: Profile; you: boolean }) {
 function GameRow({ game, name, you }: { game: HistoryEntry; name: string; you: boolean }) {
   const result = RESULT[game.result];
   const { opponent, ratingDelta: delta } = game;
-  const resigned =
-    game.endReason !== "resign"
-      ? null
-      : game.result === "win"
-        ? you
-          ? "they resigned"
-          : `${opponent?.name ?? "opponent"} resigned`
-        : you
-          ? "you resigned"
-          : `${name} resigned`;
+  const verb =
+    game.endReason === "resign" ? "resigned" : game.endReason === "abandon" ? "left" : null;
+  const resigned = !verb
+    ? null
+    : game.result === "win"
+      ? you
+        ? `they ${verb}`
+        : `${opponent?.name ?? "opponent"} ${verb}`
+      : you
+        ? `you ${verb}`
+        : `${name} ${verb}`;
 
   return (
     <li className="relative flex items-center gap-3 border-t border-neutral-100 px-4 py-3 transition first:border-t-0 hover:bg-neutral-50">

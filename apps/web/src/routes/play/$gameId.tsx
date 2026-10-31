@@ -152,7 +152,7 @@ function useFollowRematch(view: MatchView | null) {
   }, [next, navigate]);
 }
 
-/** Sounds for what the board does not show: an opponent arriving, or a resignation. */
+/** Sounds for what the board does not show: an opponent arriving, or someone resigning or leaving. */
 function useMatchSounds(view: MatchView | null) {
   const previous = useRef(view);
   useEffect(() => {

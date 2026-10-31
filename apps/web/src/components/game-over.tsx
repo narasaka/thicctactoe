@@ -44,9 +44,11 @@ export function gameResult(view: MatchView) {
   const ending =
     view.endReason === "resign" && winner
       ? `${name(other(winner))} resigned`
-      : view.endReason === "draw"
-        ? "No moves left"
-        : "Three in a row";
+      : view.endReason === "abandon" && winner
+        ? `${name(other(winner))} left`
+        : view.endReason === "draw"
+          ? "No moves left"
+          : "Three in a row";
   // Friend games, guests' games and games resigned before they began.
   const reason = view.ratingDelta === null ? `${ending} · Unrated` : ending;
   return { headline, reason };
