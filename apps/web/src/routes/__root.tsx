@@ -44,6 +44,7 @@ function RootDocument() {
     <html lang="en">
       <head>
         <HeadContent />
+        <script defer src="https://assets.onedollarstats.com/stonks.js" />
       </head>
       <body>
         <Outlet />
