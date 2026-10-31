@@ -56,6 +56,7 @@ const view = (patch: Partial<MatchView>): MatchView => ({
   ratingCapped: false,
   rematchOffer: null,
   rematchId: null,
+  search: null,
   startedAt: null,
   finishedAt: null,
   ...patch,
@@ -63,6 +64,13 @@ const view = (patch: Partial<MatchView>): MatchView => ({
 
 test("an opponent arriving starts the game", () => {
   expect(matchSound(view({ status: "waiting" }), view({}))).toEqual({ type: "start" });
+});
+
+test("a match found while playing the bot sounds like an opponent arriving", () => {
+  const searching = view({ search: { id: "m", found: false } });
+  const found = view({ status: "cancelled", search: { id: "m", found: true } });
+  expect(matchSound(searching, found)).toEqual({ type: "start" });
+  expect(matchSound(found, found)).toBeNull();
 });
 
 test("a resignation sounds like the result", () => {

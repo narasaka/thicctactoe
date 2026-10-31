@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import Avatar from "@/components/avatar";
+import BotTag from "@/components/bot-tag";
 import Button, { buttonClass } from "@/components/button";
 import Layout from "@/components/layout";
 import RatingChart from "@/components/rating-chart";
@@ -67,11 +68,31 @@ function ProfilePage() {
   }
 
   const you = session?.user.publicId === profile.id;
-  const played = profile.wins + profile.losses + profile.draws;
 
   return (
     <Layout className="container max-w-2xl">
       <Header profile={profile} you={you} />
+      {profile.bot ? (
+        <p className="mt-6 rounded-xl bg-white p-4 text-sm text-neutral-600 shadow-sm">
+          {profile.name} is a bot, not a person. Anyone waiting for a match can play it meanwhile.
+          Games against it are never rated.
+        </p>
+      ) : (
+        <Record profile={profile} you={you} />
+      )}
+      <section className="mt-6">
+        <h2 className="mb-2 px-1 text-sm font-semibold text-neutral-500">Games</h2>
+        <Games profile={profile} you={you} />
+      </section>
+    </Layout>
+  );
+}
+
+/** Rating, record and the rating trend. */
+function Record({ profile, you }: { profile: Profile; you: boolean }) {
+  const played = profile.wins + profile.losses + profile.draws;
+  return (
+    <>
       <div className="mt-6 grid grid-cols-4 gap-2">
         <Stat label="Rating" value={profile.rating} strong />
         <Stat label="Wins" value={profile.wins} />
@@ -94,23 +115,25 @@ function ProfilePage() {
           </p>
         )}
       </section>
-      <section className="mt-6">
-        <h2 className="mb-2 px-1 text-sm font-semibold text-neutral-500">Games</h2>
-        <Games profile={profile} you={you} />
-      </section>
-    </Layout>
+    </>
   );
 }
 
 function Header({ profile, you }: { profile: Profile; you: boolean }) {
   return (
     <div className="flex items-center gap-4">
-      <Avatar name={profile.name} image={profile.image} className="size-16 text-2xl" />
+      <Avatar
+        name={profile.name}
+        image={profile.image}
+        bot={profile.bot}
+        className="size-16 text-2xl"
+      />
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-3xl font-pixel sm:text-4xl">{profile.name}</h1>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-500">
           {you && <Tag>You</Tag>}
           {profile.anonymous && <Tag>Guest</Tag>}
+          {profile.bot && <BotTag className="px-1.5 py-0.5 text-xs" />}
           <span>Joined {monthFormat.format(profile.joinedAt)}</span>
         </div>
       </div>
@@ -185,7 +208,7 @@ function Games({ profile, you }: { profile: Profile; you: boolean }) {
         ) : (
           <ul>
             {games.map((game) => (
-              <GameRow key={game.id} game={game} name={profile.name} you={you} />
+              <GameRow key={game.id} game={game} profile={profile} you={you} />
             ))}
           </ul>
         )}
@@ -206,7 +229,8 @@ function Games({ profile, you }: { profile: Profile; you: boolean }) {
 }
 
 /** One game from the profile owner's side. The row opens the replay; the opponent, their profile. */
-function GameRow({ game, name, you }: { game: HistoryEntry; name: string; you: boolean }) {
+function GameRow({ game, profile, you }: { game: HistoryEntry; profile: Profile; you: boolean }) {
+  const { name } = profile;
   const result = RESULT[game.result];
   const { opponent, ratingDelta: delta } = game;
   const verb =
@@ -236,7 +260,7 @@ function GameRow({ game, name, you }: { game: HistoryEntry; name: string; you: b
       </span>
       {/* Positioned for the seat dot, which would otherwise lift it over the replay link. */}
       <div className="pointer-events-none relative">
-        <Avatar name={opponent?.name ?? "?"} image={opponent?.image} />
+        <Avatar name={opponent?.name ?? "?"} image={opponent?.image} bot={opponent?.bot} />
         <span
           className={cn(
             "absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-white",
@@ -258,11 +282,12 @@ function GameRow({ game, name, you }: { game: HistoryEntry; name: string; you: b
           ) : (
             "Deleted player"
           )}
+          {opponent?.bot && <BotTag className="ml-1.5 align-middle" />}
         </div>
         <div className="truncate text-xs text-neutral-500">
           {game.moveCount} {game.moveCount === 1 ? "move" : "moves"}
           {resigned && ` · ${resigned}`}
-          {game.private && " · friend game"}
+          {game.private && !opponent?.bot && !profile.bot && " · friend game"}
           {delta === null && " · unrated"} · {dateFormat.format(game.finishedAt)}
         </div>
       </div>

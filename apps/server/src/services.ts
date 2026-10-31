@@ -1,4 +1,5 @@
 import { createArena } from "@thicctactoe/api/arena";
+import { createBot } from "@thicctactoe/api/bot";
 import { createLimits } from "@thicctactoe/api/limits";
 import { createAuth } from "@thicctactoe/auth";
 import { createDb } from "@thicctactoe/db";
@@ -10,7 +11,10 @@ import { createAvatars } from "./avatars";
 import { ENV } from "./env";
 
 export const db = createDb(ENV);
-export const arena = createArena({ db });
+export const arena = createArena({
+  db,
+  bot: createBot({ url: ENV.BOT_URL, token: ENV.BOT_TOKEN }),
+});
 export const limits = createLimits();
 
 // `bun --hot` re-runs this module in the same process: retire the previous arena.

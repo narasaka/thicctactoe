@@ -12,11 +12,13 @@ import { cn } from "@thicctactoe/ui/lib/utils";
 import { Crown, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
-import type { MatchView } from "@/lib/match-view";
+import { type MatchView, againstBot } from "@/lib/match-view";
 import { client } from "@/utils/orpc";
 
 import Avatar from "./avatar";
+import BotTag from "./bot-tag";
 import Button, { buttonClass } from "./button";
+import SearchStatus from "./search-status";
 import SignInButtons from "./sign-in-buttons";
 
 const COLOR_NAMES = { X: "Green", O: "Purple" } as const;
@@ -87,8 +89,13 @@ export function GameOverActions({
     intent: "secondary",
     className: cn("text-center whitespace-nowrap", inline && "px-3 text-sm"),
   });
+  // A new game after the bot goes back to looking for a person.
   const playAgain = () =>
-    void (view.private ? client.arena.invite({ rated: view.rated }) : client.arena.quickMatch())
+    void (
+      view.private && !againstBot(view)
+        ? client.arena.invite({ rated: view.rated })
+        : client.arena.quickMatch()
+    )
       .then(({ id }) => navigate({ to: "/play/$gameId", params: { gameId: id } }))
       .catch((error: Error) => toast.error(error.message));
 
@@ -189,6 +196,7 @@ export default function GameOverDialog({
             {headline}
           </DialogTitle>
           <DialogDescription className="mt-1 text-sm text-neutral-400">{reason}</DialogDescription>
+          {view.search && <SearchStatus search={view.search} className="mt-2 justify-center" />}
         </div>
         <div className="flex items-start justify-center gap-2 px-6 pt-6 short:pt-4">
           {PLAYERS.map((player) => (
@@ -247,6 +255,7 @@ function Contender({ view, player, won }: { view: MatchView; player: Player; won
         <Avatar
           name={profile?.name ?? "?"}
           image={profile?.image}
+          bot={profile?.bot}
           className={cn(
             "size-14 ring-4 short:size-11",
             won ? SEAT_RING[player] : "ring-transparent",
@@ -262,7 +271,7 @@ function Contender({ view, player, won }: { view: MatchView; player: Player; won
         {profile?.name ?? COLOR_NAMES[player]}
       </div>
       <div className="flex gap-1 text-xs text-neutral-500">
-        {profile?.rating}
+        {profile?.bot ? <BotTag /> : profile?.rating}
         {delta !== undefined && (
           <span className={delta >= 0 ? "text-emerald-600" : "text-rose-600"}>
             {delta >= 0 ? `+${delta}` : delta}

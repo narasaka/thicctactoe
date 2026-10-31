@@ -16,6 +16,7 @@ const view = (patch: Partial<MatchView>): MatchView => ({
   ratingCapped: false,
   rematchOffer: null,
   rematchId: null,
+  search: null,
   startedAt: null,
   finishedAt: null,
   ...patch,
