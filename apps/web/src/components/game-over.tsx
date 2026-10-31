@@ -11,13 +11,12 @@ import { cn } from "@thicctactoe/ui/lib/utils";
 import { Crown, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { PROVIDERS, signInWith } from "@/lib/auth-client";
 import type { MatchView } from "@/lib/match-view";
 import { client } from "@/utils/orpc";
 
 import Avatar from "./avatar";
 import Button, { buttonClass } from "./button";
-import ProviderIcon from "./provider-icon";
+import SignInButtons from "./sign-in-buttons";
 
 const COLOR_NAMES = { X: "Green", O: "Purple" } as const;
 const SEAT_RING = { X: "ring-emerald-400", O: "ring-indigo-400" } as const;
@@ -49,7 +48,7 @@ export function gameResult(view: MatchView) {
         : view.endReason === "draw"
           ? "No moves left"
           : "Three in a row";
-  // Friend games, guests' games and games resigned before they began.
+  // Unrated friend games, guests' games and games resigned before they began.
   const reason = view.ratingDelta === null ? `${ending} · Unrated` : ending;
   return { headline, reason };
 }
@@ -75,7 +74,7 @@ export function GameOverActions({
     className: cn("text-center whitespace-nowrap", inline && "px-3 text-sm"),
   });
   const playAgain = () =>
-    void (view.private ? client.arena.invite() : client.arena.quickMatch())
+    void (view.private ? client.arena.invite({ rated: view.rated }) : client.arena.quickMatch())
       .then(({ id }) => navigate({ to: "/play/$gameId", params: { gameId: id } }))
       .catch((error: Error) => toast.error(error.message));
 
@@ -199,19 +198,7 @@ export default function GameOverDialog({
               Guest games are unrated. Sign in to keep this game and play rated games against other
               signed-in players.
             </p>
-            <div className="mt-4 flex flex-col gap-2 short:mt-3">
-              {PROVIDERS.map(({ id, name }) => (
-                <button
-                  key={id}
-                  type="button"
-                  className="flex items-center justify-center gap-3 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium transition hover:bg-neutral-100 active:bg-neutral-200"
-                  onClick={() => signInWith(id)}
-                >
-                  <ProviderIcon provider={id} />
-                  Continue with {name}
-                </button>
-              ))}
-            </div>
+            <SignInButtons className="mt-4 short:mt-3" />
           </div>
         )}
         {/* Last in tab order: focus starts on the actions, not on dismissing them. */}

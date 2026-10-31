@@ -6,6 +6,7 @@ const view = (patch: Partial<MatchView>): MatchView => ({
   id: "g",
   status: "active",
   private: false,
+  rated: true,
   seat: null,
   players: { X: null, O: null },
   moves: [],

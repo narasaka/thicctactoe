@@ -33,6 +33,8 @@ export const game = pgTable(
     status: gameStatus("status").default("waiting").notNull(),
     /** Private games are only joinable by link; public ones by matchmaking. */
     private: boolean("private").default(false).notNull(),
+    /** Whether the game may change ratings. Matchmade games are; invites are if their host chose so. */
+    rated: boolean("rated").default(false).notNull(),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     playerX: text("player_x").references(() => user.id, { onDelete: "set null" }),
     playerO: text("player_o").references(() => user.id, { onDelete: "set null" }),
