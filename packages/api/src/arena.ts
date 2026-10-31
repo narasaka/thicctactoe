@@ -761,6 +761,8 @@ export function createArena({
         // Closing ends the stream cleanly, so the client reconnects elsewhere.
         if (!closing.signal.aborted) throw error;
       } finally {
+        // Unsubscribes even if the stream failed before it began reading updates.
+        await updates.return();
         const count = watching.get(gameId)! - 1;
         if (count > 0) watching.set(gameId, count);
         else watching.delete(gameId);

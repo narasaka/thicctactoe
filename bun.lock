@@ -21,6 +21,7 @@
     "apps/server": {
       "name": "server",
       "dependencies": {
+        "@better-auth/core": "1.7.7",
         "@dicebear/core": "^10.7.0",
         "@dicebear/styles": "^10.6.0",
         "@dotenvx/dotenvx": "^2.34.2",

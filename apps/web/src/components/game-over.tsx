@@ -9,6 +9,7 @@ import {
 } from "@thicctactoe/ui/components/dialog";
 import { cn } from "@thicctactoe/ui/lib/utils";
 import { Crown, Loader2, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { PROVIDERS, signInWith } from "@/lib/auth-client";
 import type { MatchView } from "@/lib/match-view";
@@ -72,9 +73,9 @@ export function GameOverActions({
     className: cn("text-center whitespace-nowrap", inline && "px-3 text-sm"),
   });
   const playAgain = () =>
-    void (view.private ? client.arena.invite() : client.arena.quickMatch()).then(({ id }) =>
-      navigate({ to: "/play/$gameId", params: { gameId: id } }),
-    );
+    void (view.private ? client.arena.invite() : client.arena.quickMatch())
+      .then(({ id }) => navigate({ to: "/play/$gameId", params: { gameId: id } }))
+      .catch((error: Error) => toast.error(error.message));
 
   return (
     <div className={cn(inline ? "flex h-10 items-center gap-2" : "flex flex-col gap-2")}>

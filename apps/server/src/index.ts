@@ -53,10 +53,10 @@ export const rpcHandler = new RPCHandler(appRouter, {
   ],
 });
 
-// Both handlers serve the whole router. Floods are turned away before the
-// session lookup, which costs a database query.
-app.use("/rpc/*", limitRequests);
-app.use("/api-reference/*", limitRequests);
+// Both handlers serve the whole router. Only their paths look up the session,
+// which costs a database query, and floods are turned away before it.
+app.use("/rpc/*", limitRequests, serve(rpcHandler, "/rpc"));
+app.use("/api-reference/*", limitRequests, serve(apiHandler, "/api-reference"));
 
 async function limitRequests(c: Context, next: Next) {
   const result = limits.hit("requests", [`ip:${clientIp(c)}`]);
@@ -67,29 +67,14 @@ async function limitRequests(c: Context, next: Next) {
   await next();
 }
 
-app.use("/*", async (c, next) => {
-  const context = await createContext({ context: c });
-
-  const rpcResult = await rpcHandler.handle(c.req.raw, {
-    prefix: "/rpc",
-    context: context,
-  });
-
-  if (rpcResult.matched) {
-    return c.newResponse(rpcResult.response.body, rpcResult.response);
-  }
-
-  const apiResult = await apiHandler.handle(c.req.raw, {
-    prefix: "/api-reference",
-    context: context,
-  });
-
-  if (apiResult.matched) {
-    return c.newResponse(apiResult.response.body, apiResult.response);
-  }
-
-  await next();
-});
+function serve(handler: typeof rpcHandler | typeof apiHandler, prefix: `/${string}`) {
+  return async (c: Context, next: Next) => {
+    const context = await createContext({ context: c });
+    const { matched, response } = await handler.handle(c.req.raw, { prefix, context });
+    if (matched) return c.newResponse(response.body, response);
+    await next();
+  };
+}
 
 app.get("/", (c) => {
   return c.text("OK");
