@@ -1017,15 +1017,22 @@ describe("bot games", () => {
     await expect(arena.playBot(search, host)).rejects.toThrow("already started");
   });
 
-  test("a host watching their search when the match starts calls the bot game off", async () => {
-    const { host, search, id } = await waitWithBot();
-    const waiting = arena.watch(search, host);
-    await waiting.next();
-    await arena.join(search, await addUser("rival"));
-    let update = (await waiting.next()).value;
-    while (update?.status !== "active") update = (await waiting.next()).value;
-    await waiting.return(undefined);
-    expect((await arena.view(id, null)).status).toBe("cancelled");
+  test("a bot game left once the match was found is called off, not lost", async () => {
+    const leaving = start({ forfeitAfterMs: 20 });
+    const { host, search, id } = await waitWithBot(leaving);
+    await leaving.move(id, host, { player: "X", size: "small", cell: 4 });
+    await afterMoves(id, 2);
+    // Watching the match start elsewhere leaves the bot game be.
+    const elsewhere = leaving.watch(search, host);
+    await elsewhere.next();
+    await leaving.join(search, await addUser("rival"));
+    expect((await leaving.view(id, null)).status).toBe("active");
+
+    await Bun.sleep(50);
+    await leaving.sweep();
+    expect(await leaving.view(id, null)).toMatchObject({ status: "cancelled", winner: null });
+    expect((await leaving.history(await publicIdOf(host))).games).toEqual([]);
+    await elsewhere.return(undefined);
   });
 
   test("a player still playing the bot learns when their match ends without them", async () => {

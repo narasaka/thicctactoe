@@ -490,6 +490,15 @@ export function createArena({
     return found?.status;
   }
 
+  /** Whether someone joined the public game a player waited in while playing the bot. */
+  async function matchFound(tx: Tx, searchId: string) {
+    const [match] = await tx
+      .select({ status: gameTable.status })
+      .from(gameTable)
+      .where(eq(gameTable.publicId, searchId));
+    return match?.status === "active" || match?.status === "finished";
+  }
+
   async function ensureBot(tx: Tx) {
     await tx
       .insert(user)
@@ -890,6 +899,11 @@ export function createArena({
               .limit(1);
             if (seen) return false;
           }
+          if (row.searchId && (await matchFound(tx, row.searchId))) {
+            // Left for the match found meanwhile, or ignored it: called off, not lost.
+            await tx.update(gameTable).set({ status: "cancelled" }).where(eq(gameTable.id, row.id));
+            return true;
+          }
           await finish(tx, row, other(absent), "abandon");
           return true;
         })
@@ -1180,15 +1194,7 @@ export function createArena({
         } else {
           yield forViewer(initial, userId);
         }
-        let status = initial.view.status;
-        for await (const update of updates) {
-          // A host who sees their match start here has shown up for it too.
-          if (connection && status === "waiting" && update.view.status === "active") {
-            await broadcastAll(await leaveBotGames(update.view, userId!));
-          }
-          status = update.view.status;
-          yield forViewer(update, userId);
-        }
+        for await (const update of updates) yield forViewer(update, userId);
       } catch (error) {
         // Closing ends the stream cleanly, so the client reconnects elsewhere.
         if (!closing.signal.aborted) throw error;
