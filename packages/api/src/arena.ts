@@ -1180,7 +1180,15 @@ export function createArena({
         } else {
           yield forViewer(initial, userId);
         }
-        for await (const update of updates) yield forViewer(update, userId);
+        let status = initial.view.status;
+        for await (const update of updates) {
+          // A host who sees their match start here has shown up for it too.
+          if (connection && status === "waiting" && update.view.status === "active") {
+            await broadcastAll(await leaveBotGames(update.view, userId!));
+          }
+          status = update.view.status;
+          yield forViewer(update, userId);
+        }
       } catch (error) {
         // Closing ends the stream cleanly, so the client reconnects elsewhere.
         if (!closing.signal.aborted) throw error;
