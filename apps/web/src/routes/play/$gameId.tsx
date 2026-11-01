@@ -28,9 +28,6 @@ export const Route = createFileRoute("/play/$gameId")({
 /** Long enough to see the winning line before the result covers the board. */
 const GAME_OVER_DELAY_MS = 900;
 
-/** Long enough to read that a player was found, short enough not to keep them waiting. */
-const SWITCH_DELAY_MS = 1_200;
-
 /** A quiet text action, for resigning. */
 const TEXT_LINK = "text-sm whitespace-nowrap text-neutral-400 underline hover:text-neutral-600";
 
@@ -55,7 +52,7 @@ function Match({ gameId }: { gameId: string }) {
 
   const gameOver = useGameOverDialog(view);
   useFollowRematch(view);
-  const switching = useFollowSearch(view);
+  useMatchFoundToast(view);
   useMatchSounds(view);
 
   if (error) {
@@ -87,14 +84,6 @@ function Match({ gameId }: { gameId: string }) {
   if (view.status === "waiting") {
     return <WaitingRoom view={view} cancel={() => match.cancel.mutate()} />;
   }
-  if (view.status === "cancelled" && switching) {
-    return (
-      <Message title="Player found!">
-        <Loader2 className="animate-spin text-neutral-400" />
-        <p className="text-sm text-gray-500">Switching you to your match…</p>
-      </Message>
-    );
-  }
   if (view.status === "cancelled") {
     return (
       <Message title="Game cancelled">
@@ -124,7 +113,7 @@ function Match({ gameId }: { gameId: string }) {
         key={view.id}
         game={game}
         seats={seat ? [seat] : []}
-        locked={!playing || switching}
+        locked={!playing}
         onMove={(move) => match.move.mutate(move)}
         players={{ X: card("X"), O: card("O") }}
         status={
@@ -182,22 +171,26 @@ function useFollowRematch(view: MatchView | null) {
 }
 
 /**
- * Moves a player who is playing the bot on to their match as soon as someone
- * joins it, for as long as that match is on.
+ * Tells a player who is playing the bot that someone joined their match, and
+ * offers to take them there. Dismissed, it leaves the link by the board.
  */
-function useFollowSearch(view: MatchView | null) {
+function useMatchFoundToast(view: MatchView | null) {
   const navigate = useNavigate();
-  const next = view?.search?.found ? view.search.id : null;
+  const match = view?.search?.found ? view.search.id : null;
 
   useEffect(() => {
-    if (!next) return;
-    const timer = setTimeout(
-      () => void navigate({ to: "/play/$gameId", params: { gameId: next } }),
-      SWITCH_DELAY_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [next, navigate]);
-  return next !== null;
+    if (!match) return;
+    const id = toast.success("Player found!", {
+      description: "Your opponent is waiting for you.",
+      duration: Infinity,
+      closeButton: true,
+      action: {
+        label: "Join match",
+        onClick: () => void navigate({ to: "/play/$gameId", params: { gameId: match } }),
+      },
+    });
+    return () => void toast.dismiss(id);
+  }, [match, navigate]);
 }
 
 /** Sounds for what the board does not show: an opponent arriving, or someone resigning or leaving. */
@@ -311,7 +304,7 @@ function WaitingRoom({ view, cancel }: { view: MatchView; cancel: () => void }) 
       <p className="text-sm text-gray-500">
         {view.private
           ? `Send them the link; the game starts once they accept. ${RATED_NOTE[`${view.rated}`]}`
-          : "Keep this page open; the game starts when someone joins. Play our bot meanwhile, and we'll switch you over when they do."}
+          : "Keep this page open; the game starts when someone joins. Play our bot meanwhile; we'll let you know when they do."}
       </p>
       {view.seat && (
         <div className="flex flex-col gap-2 md:flex-row">

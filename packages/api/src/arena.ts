@@ -447,9 +447,9 @@ export function createArena({
   }
 
   /**
-   * Seats the second player. Whoever was waiting in a public game stops
-   * playing the bot meanwhile; returns the ids of those bot games, whose
-   * player is to be told that the match was found.
+   * Seats the second player. Returns the ids of the bot games the host played
+   * while waiting in a public game, whose player is to be told that the match
+   * was found.
    */
   async function seat(tx: Tx, row: GameRow, userId: string) {
     await ensureStats(tx, userId);
@@ -464,10 +464,6 @@ export function createArena({
       .where(eq(gameTable.id, row.id));
     if (row.private) return [];
     await lockSearch(tx, row.publicId);
-    await tx
-      .update(gameTable)
-      .set({ status: "cancelled" })
-      .where(and(eq(gameTable.searchId, row.publicId), eq(gameTable.status, "active")));
     return tx
       .select({ gameId: gameTable.publicId })
       .from(gameTable)
@@ -524,6 +520,25 @@ export function createArena({
       })
       .returning({ publicId: gameTable.publicId });
     return row!.publicId;
+  }
+
+  /**
+   * A player who shows up for their match stops the bot games they played
+   * while waiting for it. Called off rather than lost, they count for nothing.
+   */
+  async function leaveBotGames(match: Snapshot["view"], userId: string) {
+    if (match.private || match.status !== "active") return [];
+    return db
+      .update(gameTable)
+      .set({ status: "cancelled" })
+      .where(
+        and(
+          eq(gameTable.searchId, match.id),
+          eq(gameTable.playerX, userId),
+          eq(gameTable.status, "active"),
+        ),
+      )
+      .returning({ gameId: gameTable.publicId });
   }
 
   const isBotGame = (row: GameRow) => row.playerX === BOT_ID || row.playerO === BOT_ID;
@@ -1015,8 +1030,9 @@ export function createArena({
 
     /**
      * Starts a game against the bot for a player waiting in a public game,
-     * who stays in the queue meanwhile: once someone joins that game, the bot
-     * game is called off. Asking again returns the bot game in progress.
+     * who stays in the queue meanwhile: once someone joins that game, they are
+     * told, and the bot game is called off when they go to it. Asking again
+     * returns the bot game in progress.
      */
     async playBot(searchId: string, userId: string): Promise<string> {
       return db.transaction(async (tx) => {
@@ -1153,7 +1169,8 @@ export function createArena({
         if (userId !== null && forViewer(initial, userId).seat !== null) {
           // Announce the player as online; this stream receives that update too.
           connection = await connect(gameId, userId);
-          await broadcast(gameId);
+          const left = await leaveBotGames(initial.view, userId);
+          await broadcastAll([{ gameId }, ...left]);
         } else {
           yield forViewer(initial, userId);
         }

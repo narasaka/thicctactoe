@@ -988,19 +988,28 @@ describe("bot games", () => {
     });
   });
 
-  test("once someone joins the match, the bot game is called off and its player told", async () => {
+  test("once someone joins the match, its player is told, and going to it calls the bot game off", async () => {
     const { host, search, id } = await waitWithBot();
-    await arena.move(id, host, { player: "X", size: "small", cell: 4 });
-    await afterMoves(id, 2);
     const stream = arena.watch(id, host);
     await stream.next();
 
     const rival = await addUser("rival");
     expect(await arena.quickMatch(rival)).toBe(search);
     let update = (await stream.next()).value;
+    while (!update?.search?.found) update = (await stream.next()).value;
+    expect(update).toMatchObject({ status: "active", search: { id: search, found: true } });
+    // The bot game goes on until the player leaves it for the match.
+    await arena.move(id, host, { player: "X", size: "small", cell: 4 });
+    await afterMoves(id, 2);
+    const waiting = arena.watch(search, rival);
+    await waiting.next();
+    expect((await arena.view(id, null)).status).toBe("active");
+
+    const match = arena.watch(search, host);
+    await match.next();
     while (update?.status !== "cancelled") update = (await stream.next()).value;
-    expect(update).toMatchObject({ search: { id: search, found: true }, winner: null });
-    await stream.return(undefined);
+    expect(update).toMatchObject({ winner: null, moves: { length: 2 } });
+    await Promise.all([stream, waiting, match].map((open) => open.return(undefined)));
 
     // Called off, the game is no loss: it is in nobody's history or record.
     expect((await arena.history(await publicIdOf(host))).games).toEqual([]);
