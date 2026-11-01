@@ -649,6 +649,12 @@ export function createArena({
         finishedAt: new Date(),
       })
       .where(eq(gameTable.id, row.id));
+    // Whoever still plays the bot while this match waited for them learns it is over, once it commits.
+    if (!row.private) {
+      await tx.execute(
+        sql`select pg_notify(${CHANNEL}, ${gameTable.publicId}) from ${gameTable} where ${gameTable.searchId} = ${row.publicId}`,
+      );
+    }
   }
 
   /**

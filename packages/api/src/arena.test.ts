@@ -1017,6 +1017,21 @@ describe("bot games", () => {
     await expect(arena.playBot(search, host)).rejects.toThrow("already started");
   });
 
+  test("a player still playing the bot learns when their match ends without them", async () => {
+    const { host, search, id } = await waitWithBot();
+    const stream = arena.watch(id, host);
+    await stream.next();
+    const rival = await addUser("rival");
+    await arena.join(search, rival);
+    let update = (await stream.next()).value;
+    while (!update?.search?.found) update = (await stream.next()).value;
+
+    await arena.resign(search, rival);
+    while (update?.search) update = (await stream.next()).value;
+    expect(update).toMatchObject({ status: "active", search: null });
+    await stream.return(undefined);
+  });
+
   test("a finished bot game learns that the match was found, and offers no rematch meanwhile", async () => {
     const { host, search, id } = await waitWithBot();
     await arena.resign(id, host);

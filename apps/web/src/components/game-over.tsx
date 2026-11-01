@@ -89,12 +89,14 @@ export function GameOverActions({
     intent: "secondary",
     className: cn("text-center whitespace-nowrap", inline && "px-3 text-sm"),
   });
-  // A new game after the bot goes back to looking for a person.
+  // A new game after the bot goes back to the search for a person, or starts one.
   const playAgain = () =>
     void (
-      view.private && !againstBot(view)
-        ? client.arena.invite({ rated: view.rated })
-        : client.arena.quickMatch()
+      view.search
+        ? Promise.resolve(view.search)
+        : view.private && !againstBot(view)
+          ? client.arena.invite({ rated: view.rated })
+          : client.arena.quickMatch()
     )
       .then(({ id }) => navigate({ to: "/play/$gameId", params: { gameId: id } }))
       .catch((error: Error) => toast.error(error.message));
