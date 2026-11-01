@@ -8,7 +8,8 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 
 import { call } from "@orpc/server";
 
-import { type Arena, type ArenaOptions, type MatchView, createArena } from "./arena";
+import { type Arena, type ArenaOptions, BOT_ID, type MatchView, createArena } from "./arena";
+import type { Bot } from "./bot";
 import type { Context } from "./context";
 import { type Limits, createLimits } from "./limits";
 import { PAIR_RATING_CAP, ratingChange } from "./rating";
@@ -21,7 +22,13 @@ const db = createDb({ DATABASE_URL });
 /** Every arena a test starts, as if each were its own server instance. */
 const arenas: Arena[] = [];
 const start = (options: Omit<ArenaOptions, "db"> = {}) => {
-  const instance = createArena({ db, abandonGraceMs: 10, heartbeatMs: 60_000, ...options });
+  const instance = createArena({
+    db,
+    abandonGraceMs: 10,
+    heartbeatMs: 60_000,
+    botDelayMs: () => 0,
+    ...options,
+  });
   arenas.push(instance);
   return instance;
 };
@@ -547,7 +554,7 @@ describe("history", () => {
     expect(games).toEqual([
       expect.objectContaining({
         id: resigned,
-        opponent: { id: await publicIdOf(X), name: X, image: null, anonymous: false },
+        opponent: { id: await publicIdOf(X), name: X, image: null, anonymous: false, bot: false },
         result: "win",
         endReason: "resign",
         ratingDelta: null,
@@ -886,6 +893,232 @@ describe("games left mid-play", () => {
     await Promise.all([a.sweep(), b.sweep(), a.sweep(), b.sweep()]);
     expect(await statsOf(started.X)).toMatchObject({ rating: 984, losses: 1 });
     expect(await statsOf(started.O)).toMatchObject({ rating: 1016, wins: 1 });
+  });
+});
+
+describe("bot games", () => {
+  /** A player waiting for a match, who plays the bot meanwhile. */
+  async function waitWithBot(instance = arena) {
+    const host = await addUser("host");
+    const search = await instance.quickMatch(host);
+    return { host, search, id: await instance.playBot(search, host) };
+  }
+
+  /** The game once it has `count` moves, which the bot plays in the background. */
+  async function afterMoves(id: string, count: number) {
+    for (let tries = 0; tries < 200; tries++) {
+      const game = await arena.view(id, null);
+      if (game.moves.length >= count) return game;
+      await Bun.sleep(10);
+    }
+    throw new Error("The bot never moved");
+  }
+
+  /** Never answers, like a bot on an instance that died mid-thought. */
+  const stuck: Bot = { chooseMove: () => new Promise(() => {}) };
+
+  test("a player waiting for a match can play the bot as X, unrated, and stays in the queue", async () => {
+    const { host, search, id } = await waitWithBot();
+    const game = await arena.view(id, host);
+    expect(game).toMatchObject({
+      status: "active",
+      private: true,
+      rated: false,
+      seat: "X",
+      search: { id: search, found: false },
+      players: { X: { bot: false }, O: { name: "thicc bot", bot: true, online: true } },
+    });
+    // Only the player sees the match they are waiting for.
+    expect((await arena.view(id, null)).search).toBeNull();
+    expect((await arena.view(search, host)).status).toBe("waiting");
+    // Asking again returns the game in progress.
+    expect(await arena.playBot(search, host)).toBe(id);
+  });
+
+  test("only the player waiting in a public game can play the bot from it", async () => {
+    const { search } = await waitWithBot();
+    const other = await addUser("other");
+    await expect(arena.playBot(search, other)).rejects.toThrow("not waiting for this match");
+    await expect(arena.playBot(await arena.invite(other), other)).rejects.toThrow(
+      "not waiting for this match",
+    );
+    await arena.quickMatch(other);
+    await expect(arena.playBot(search, (await addUser("late")) && "host")).rejects.toThrow(
+      "already started",
+    );
+  });
+
+  test("the bot answers every move", async () => {
+    const { host, id } = await waitWithBot();
+    await arena.move(id, host, { player: "X", size: "small", cell: 4 });
+    const game = await afterMoves(id, 2);
+    expect(game.moves[1]).toMatchObject({ player: "O" });
+    await Bun.sleep(50);
+    expect((await arena.view(id, null)).moves).toHaveLength(2);
+  });
+
+  test("bot games leave ratings, records and the leaderboard alone", async () => {
+    const { host, id } = await waitWithBot();
+    await arena.move(id, host, { player: "X", size: "small", cell: 4 });
+    await afterMoves(id, 2);
+    expect(await arena.resign(id, host)).toMatchObject({ status: "finished", ratingDelta: null });
+
+    expect(await statsOf(host)).toMatchObject({ rating: 1000, wins: 0, losses: 0, draws: 0 });
+    expect(await db.query.playerStats.findFirst({ where: { userId: BOT_ID } })).toBeUndefined();
+    const bot = await arena.profile(await publicIdOf(BOT_ID));
+    expect(bot).toMatchObject({ name: "thicc bot", bot: true, rank: null, ratings: [] });
+    expect((await arena.history(await publicIdOf(host))).games).toMatchObject([
+      { id, result: "loss", ratingDelta: null, opponent: { name: "thicc bot", bot: true } },
+    ]);
+    // Even with a record, the bot stays off the leaderboard.
+    await db.insert(playerStats).values({ userId: BOT_ID, wins: 5 });
+    expect(await arena.leaderboard()).toEqual([]);
+  });
+
+  test("the bot accepts a rematch right away, and its opponent keeps X", async () => {
+    const { host, search, id } = await waitWithBot();
+    await arena.resign(id, host);
+    const { rematchId } = await arena.rematch(id, host);
+    expect(await arena.view(rematchId!, host)).toMatchObject({
+      status: "active",
+      rated: false,
+      seat: "X",
+      search: { id: search, found: false },
+      players: { O: { bot: true } },
+    });
+  });
+
+  test("once someone joins the match, its player is told, and going to it calls the bot game off", async () => {
+    const { host, search, id } = await waitWithBot();
+    const stream = arena.watch(id, host);
+    await stream.next();
+
+    const rival = await addUser("rival");
+    expect(await arena.quickMatch(rival)).toBe(search);
+    let update = (await stream.next()).value;
+    while (!update?.search?.found) update = (await stream.next()).value;
+    expect(update).toMatchObject({ status: "active", search: { id: search, found: true } });
+    // The bot game goes on until the player leaves it for the match.
+    await arena.move(id, host, { player: "X", size: "small", cell: 4 });
+    await afterMoves(id, 2);
+    const waiting = arena.watch(search, rival);
+    await waiting.next();
+    expect((await arena.view(id, null)).status).toBe("active");
+
+    const match = arena.watch(search, host);
+    await match.next();
+    while (update?.status !== "cancelled") update = (await stream.next()).value;
+    expect(update).toMatchObject({ winner: null, moves: { length: 2 } });
+    await Promise.all([stream, waiting, match].map((open) => open.return(undefined)));
+
+    // Called off, the game is no loss: it is in nobody's history or record.
+    expect((await arena.history(await publicIdOf(host))).games).toEqual([]);
+    expect(await statsOf(host)).toMatchObject({ wins: 0, losses: 0, draws: 0 });
+    await expect(arena.playBot(search, host)).rejects.toThrow("already started");
+  });
+
+  test("a bot game left once the match was found is called off, not lost", async () => {
+    const leaving = start({ forfeitAfterMs: 20 });
+    const { host, search, id } = await waitWithBot(leaving);
+    await leaving.move(id, host, { player: "X", size: "small", cell: 4 });
+    await afterMoves(id, 2);
+    // Watching the match start elsewhere leaves the bot game be.
+    const elsewhere = leaving.watch(search, host);
+    await elsewhere.next();
+    await leaving.join(search, await addUser("rival"));
+    expect((await leaving.view(id, null)).status).toBe("active");
+
+    await Bun.sleep(50);
+    await leaving.sweep();
+    expect(await leaving.view(id, null)).toMatchObject({ status: "cancelled", winner: null });
+    const { games } = await leaving.history(await publicIdOf(host));
+    expect(games.map((game) => game.id)).not.toContain(id);
+    await elsewhere.return(undefined);
+  });
+
+  test("a player still playing the bot learns when their match ends without them", async () => {
+    const { host, search, id } = await waitWithBot();
+    const stream = arena.watch(id, host);
+    await stream.next();
+    const rival = await addUser("rival");
+    await arena.join(search, rival);
+    let update = (await stream.next()).value;
+    while (!update?.search?.found) update = (await stream.next()).value;
+
+    await arena.resign(search, rival);
+    while (update?.search) update = (await stream.next()).value;
+    expect(update).toMatchObject({ status: "active", search: null });
+    await stream.return(undefined);
+  });
+
+  test("a finished bot game learns that the match was found, and offers no rematch meanwhile", async () => {
+    const { host, search, id } = await waitWithBot();
+    await arena.resign(id, host);
+    const rival = await addUser("rival");
+    await arena.join(search, rival);
+    expect(await arena.view(id, host)).toMatchObject({
+      status: "finished",
+      search: { id: search, found: true },
+    });
+    await expect(arena.rematch(id, host)).rejects.toThrow("match has been found");
+
+    // Once the match is over, the bot game no longer points to it, and the bot plays again.
+    await arena.resign(search, rival);
+    expect((await arena.view(id, host)).search).toBeNull();
+    const { rematchId } = await arena.rematch(id, host);
+    expect((await arena.view(rematchId!, host)).search).toBeNull();
+  });
+
+  test("a waiting game stays open while its player plays the bot, and closes once they leave", async () => {
+    const { host, search, id } = await waitWithBot();
+    const stream = arena.watch(id, host);
+    await stream.next();
+    await Bun.sleep(50);
+    await arena.sweep();
+    expect((await arena.view(search, null)).status).toBe("waiting");
+
+    await stream.return(undefined);
+    await Bun.sleep(50);
+    await arena.sweep();
+    expect((await arena.view(search, null)).status).toBe("cancelled");
+    expect((await arena.view(id, host)).search).toBeNull();
+  });
+
+  test("a player still playing the bot stays matchable after the matchmaking window", async () => {
+    const short = start({ matchmakingWindowMs: 100 });
+    const idle = await short.quickMatch(await addUser("idle"));
+    await Bun.sleep(150);
+    const { host, search, id } = await waitWithBot(short);
+    await Bun.sleep(150);
+    await short.move(id, host, { player: "X", size: "small", cell: 4 });
+    // The idle host's game is older, but too old to offer.
+    const rival = await short.quickMatch(await addUser("rival"));
+    expect(rival).toBe(search);
+    expect(rival).not.toBe(idle);
+  });
+
+  test("a bot turn left by an instance that died is played by the next sweep, once", async () => {
+    const dead = start({ bot: stuck });
+    const { host, id } = await waitWithBot(dead);
+    await dead.move(id, host, { player: "X", size: "small", cell: 4 });
+    const survivors = [start({ botStallMs: 20 }), start({ botStallMs: 20 })];
+    await Bun.sleep(50);
+    await Promise.all(survivors.flatMap((survivor) => [survivor.sweep(), survivor.sweep()]));
+    await afterMoves(id, 2);
+    await Bun.sleep(50);
+    expect((await arena.view(id, null)).moves).toHaveLength(2);
+  });
+
+  test("the bot is never taken for gone, however long it thinks", async () => {
+    const slow = start({ bot: stuck, forfeitAfterMs: 20, staleMs: 20 });
+    const { host, id } = await waitWithBot(slow);
+    await slow.move(id, host, { player: "X", size: "small", cell: 4 });
+    await Bun.sleep(50);
+    await slow.sweep();
+    expect(await slow.view(id, null)).toMatchObject({
+      status: "active",
+      players: { O: { online: true } },
+    });
   });
 });
 

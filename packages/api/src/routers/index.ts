@@ -21,6 +21,9 @@ export const appRouter = {
       .handler(async ({ context, input }) => ({
         id: await context.arena.invite(context.session.user.id, input?.rated),
       })),
+    playBot: gameOpeningProcedure.input(gameInput).handler(async ({ context, input }) => ({
+      id: await context.arena.playBot(input.id, context.session.user.id),
+    })),
     join: protectedProcedure
       .input(gameInput)
       .handler(({ context, input }) => context.arena.join(input.id, context.session.user.id)),

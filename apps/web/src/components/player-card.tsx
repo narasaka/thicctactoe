@@ -5,6 +5,7 @@ import { Hourglass } from "lucide-react";
 
 import Avatar from "./avatar";
 import { PieceBadge } from "./board/piece";
+import BotTag from "./bot-tag";
 
 const SEAT_COLOR = { X: "bg-emerald-400", O: "bg-indigo-400" } as const;
 const SEAT_BADGE = { X: "bg-emerald-500", O: "bg-indigo-500" } as const;
@@ -60,7 +61,12 @@ export default function PlayerCard({
         </span>
       )}
       <div className="relative">
-        <Avatar name={player?.name ?? "?"} image={player?.image} className="size-10" />
+        <Avatar
+          name={player?.name ?? "?"}
+          image={player?.image}
+          bot={player?.bot}
+          className="size-10"
+        />
         <span
           className={cn(
             "absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full border-2 border-white",
@@ -85,7 +91,8 @@ export default function PlayerCard({
           {you && <span className="text-xs text-neutral-400">(you)</span>}
           {player && (
             <span className="flex shrink-0 items-center gap-1.5 text-xs text-neutral-500">
-              <span>{player.rating}</span>
+              {/* The bot has no rating to speak of. */}
+              {player.bot ? <BotTag /> : <span>{player.rating}</span>}
               {delta !== undefined && (
                 <span className={delta >= 0 ? "text-emerald-600" : "text-rose-600"}>
                   {delta >= 0 ? `+${delta}` : delta}

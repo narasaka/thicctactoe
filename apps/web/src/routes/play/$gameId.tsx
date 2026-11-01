@@ -1,20 +1,24 @@
+import { useMutation } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { Player } from "@thicctactoe/game";
 import { cn } from "@thicctactoe/ui/lib/utils";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import GameBoard from "@/components/board/game-board";
 import Button, { buttonClass } from "@/components/button";
 import GameOverDialog, { GameOverActions, gameResult } from "@/components/game-over";
 import Layout from "@/components/layout";
 import PlayerCard, { piecesUsed } from "@/components/player-card";
+import SearchStatus from "@/components/search-status";
 import SignInButtons from "@/components/sign-in-buttons";
 import { playSound } from "@/lib/audio";
 import { useMatch } from "@/lib/match";
 import type { MatchView } from "@/lib/match-view";
 import { useGuestSession } from "@/lib/session";
 import { matchSound } from "@/lib/sounds";
+import { client } from "@/utils/orpc";
 
 export const Route = createFileRoute("/play/$gameId")({
   ssr: false,
@@ -48,6 +52,7 @@ function Match({ gameId }: { gameId: string }) {
 
   const gameOver = useGameOverDialog(view);
   useFollowRematch(view);
+  useMatchFoundToast(view);
   useMatchSounds(view);
 
   if (error) {
@@ -165,6 +170,29 @@ function useFollowRematch(view: MatchView | null) {
   }, [next, navigate]);
 }
 
+/**
+ * Tells a player who is playing the bot that someone joined their match, and
+ * offers to take them there. Dismissed, it leaves the link by the board.
+ */
+function useMatchFoundToast(view: MatchView | null) {
+  const navigate = useNavigate();
+  const match = view?.search?.found ? view.search.id : null;
+
+  useEffect(() => {
+    if (!match) return;
+    const id = toast.success("Player found!", {
+      description: "Your opponent is waiting for you.",
+      duration: Infinity,
+      closeButton: true,
+      action: {
+        label: "Join match",
+        onClick: () => void navigate({ to: "/play/$gameId", params: { gameId: match } }),
+      },
+    });
+    return () => void toast.dismiss(id);
+  }, [match, navigate]);
+}
+
 /** Sounds for what the board does not show: an opponent arriving, or someone resigning or leaving. */
 function useMatchSounds(view: MatchView | null) {
   const previous = useRef(view);
@@ -202,6 +230,7 @@ function Status({
         <div className="flex h-10 items-baseline gap-2">
           <span className="text-2xl font-pixel whitespace-nowrap">{headline}</span>
           <span className="truncate text-sm text-gray-500">{reason}</span>
+          {view.search && <SearchStatus search={view.search} className="self-center" />}
         </div>
         <GameOverActions view={view} rematch={rematch} variant="inline" />
       </>
@@ -211,6 +240,7 @@ function Status({
   return (
     <div className="flex h-10 w-full items-center justify-between gap-2">
       <span className="font-semibold text-gray-700">{turn === seat && "Your turn"}</span>
+      {view.search && <SearchStatus search={view.search} />}
       <div className={cn("flex items-center gap-2", !seat && "invisible")} inert={!seat}>
         {confirming ? (
           <>
@@ -236,7 +266,16 @@ function Status({
 }
 
 function WaitingRoom({ view, cancel }: { view: MatchView; cancel: () => void }) {
+  const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
+  // The player stays in the queue while they play, and is moved on once someone joins.
+  const playBot = useMutation({
+    mutationFn: () =>
+      client.arena
+        .playBot({ id: view.id })
+        .then(({ id }) => navigate({ to: "/play/$gameId", params: { gameId: id } })),
+    onError: (error) => toast.error(error.message),
+  });
   const link = typeof window === "undefined" ? "" : window.location.href;
   const copy = () =>
     void navigator.clipboard.writeText(link).then(() => {
@@ -245,7 +284,7 @@ function WaitingRoom({ view, cancel }: { view: MatchView; cancel: () => void }) 
     });
 
   return (
-    <Message title={view.private ? "Invite a friend" : "Finding an opponent…"}>
+    <Message title={view.private ? "Invite a friend" : "Searching for players…"}>
       {view.private && <RatedTag rated={view.rated} />}
       {view.private ? (
         <div className="flex w-full max-w-md items-center gap-2 rounded-lg bg-white p-2 shadow-sm">
@@ -265,12 +304,19 @@ function WaitingRoom({ view, cancel }: { view: MatchView; cancel: () => void }) 
       <p className="text-sm text-gray-500">
         {view.private
           ? `Send them the link; the game starts once they accept. ${RATED_NOTE[`${view.rated}`]}`
-          : "Keep this page open; the game starts when someone joins."}
+          : "Keep this page open; the game starts when someone joins. Play our bot meanwhile; we'll let you know when they do."}
       </p>
       {view.seat && (
-        <Button intent="secondary" onClick={cancel}>
-          Cancel
-        </Button>
+        <div className="flex flex-col gap-2 md:flex-row">
+          {!view.private && (
+            <Button disabled={playBot.isPending} onClick={() => playBot.mutate()}>
+              Play a bot while you wait
+            </Button>
+          )}
+          <Button intent="secondary" onClick={cancel}>
+            Cancel
+          </Button>
+        </div>
       )}
     </Message>
   );

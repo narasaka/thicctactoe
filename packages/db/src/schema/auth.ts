@@ -17,6 +17,8 @@ export const user = pgTable("user", {
   image: text("image"),
   isAnonymous: boolean("is_anonymous").default(false),
   onboarded: boolean("onboarded").default(false).notNull(),
+  /** The house bot, which plays anyone waiting for a match. It never signs in and is never rated. */
+  isBot: boolean("is_bot").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()

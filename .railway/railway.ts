@@ -4,7 +4,12 @@ import { bucket, defineRailway, github, postgres, preserve, project, service } f
  * Backend infrastructure: `railway config plan` to preview, `railway config apply`
  * to apply. App configuration lives in apps/server/.env.production (dotenvx);
  * the service only holds the key that decrypts it.
+ *
+ * Only these resources: the bot service is managed from another repository, as
+ * its own named partial.
  */
+export const partial = "public";
+
 export default defineRailway(() => {
   const db = postgres("postgres");
   const avatars = bucket("avatars", { region: "sjc" });

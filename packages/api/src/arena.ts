@@ -13,6 +13,7 @@ import {
   asc,
   desc,
   eq,
+  exists,
   gt,
   inArray,
   isNotNull,
@@ -23,8 +24,11 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { PoolClient } from "pg";
 
+import { type Bot, fallbackBot } from "./bot";
 import { PAIR_RATING_WINDOW_MS, capPairChange, ratingChange } from "./rating";
 
 export type { LoggedMove };
@@ -46,6 +50,8 @@ export type PlayerView = {
   name: string;
   image: string | null;
   anonymous: boolean;
+  /** The house bot, which never plays rated games. */
+  bot: boolean;
   rating: number;
   online: boolean;
 };
@@ -75,6 +81,12 @@ export type MatchView = {
   rematchOffer: Player | null;
   /** Public id of the rematch, once both players agreed to it. */
   rematchId: string | null;
+  /**
+   * For the player in a game against the bot: the public game they are still
+   * waiting in for a match, and whether someone has joined it and it is on.
+   * Null for everyone else, and once that game is over or cancelled.
+   */
+  search: { id: string; found: boolean } | null;
   startedAt: Date | null;
   finishedAt: Date | null;
 };
@@ -86,7 +98,7 @@ export type HistoryEntry = {
   private: boolean;
   seat: Player;
   /** Null if the opponent's account has since been deleted. */
-  opponent: Pick<PlayerView, "id" | "name" | "image" | "anonymous"> | null;
+  opponent: Pick<PlayerView, "id" | "name" | "image" | "anonymous" | "bot"> | null;
   result: "win" | "loss" | "draw";
   endReason: "line" | "draw" | "resign" | "abandon";
   /** Null for unrated games. */
@@ -119,6 +131,7 @@ export type Profile = {
   name: string;
   image: string | null;
   anonymous: boolean;
+  bot: boolean;
   joinedAt: Date;
   rating: number;
   /** Place on the leaderboard; null for guests and players yet to finish a rated game. */
@@ -134,8 +147,12 @@ export type Profile = {
 };
 
 type GameRow = typeof gameTable.$inferSelect;
-/** What is published to watchers: the shared view plus who sits where. */
-type Snapshot = { view: Omit<MatchView, "seat">; seats: Record<Player, string | null> };
+/** What is published to watchers: the shared view plus who sits where, and what only players see. */
+type Snapshot = {
+  view: Omit<MatchView, "seat" | "search">;
+  seats: Record<Player, string | null>;
+  search: MatchView["search"];
+};
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 /** Postgres channel carrying the public ids of games that changed. */
@@ -146,6 +163,10 @@ const RATING_POINTS = 500;
 
 /** A game that ends with fewer moves than this is unrated, like an abort. */
 const RATED_MIN_MOVES = 2;
+
+/** Internal id of the house bot's user, created the first time someone plays it. */
+export const BOT_ID = "bot";
+const BOT_NAME = "thicc bot";
 
 export type ArenaOptions = {
   db: Database;
@@ -164,6 +185,12 @@ export type ArenaOptions = {
    * move, if they have been gone this long too.
    */
   forfeitAfterMs?: number;
+  /** Chooses the house bot's moves. */
+  bot?: Bot;
+  /** How long the bot appears to think before each move. */
+  botDelayMs?: () => number;
+  /** A bot turn left unplayed this long, say by an instance that died, is played by the next sweep. */
+  botStallMs?: number;
 };
 
 export function createArena({
@@ -174,6 +201,9 @@ export function createArena({
   staleMs = 20_000,
   unplayedRetentionMs = 24 * 60 * 60_000,
   forfeitAfterMs = 2 * 60_000,
+  bot = fallbackBot,
+  botDelayMs = () => 500 + Math.random() * 1_000,
+  botStallMs = 15_000,
 }: ArenaOptions) {
   const publisher = new EventPublisher<Record<string, Snapshot>>();
   /** gameId -> open watch streams on this instance */
@@ -184,11 +214,18 @@ export function createArena({
   const deliveries = new Map<string, Promise<void>>();
   const closing = new AbortController();
 
+  /** Bot turns this instance is playing, by game id and how many moves came before. */
+  const botTurns = new Set<string>();
+
   const ago = (ms: number) => sql`now() - make_interval(secs => ${ms / 1000})`;
   const fresh = and(isNull(presence.leftAt), gt(presence.seenAt, ago(staleMs)));
+  /** Games against the bot played while waiting in the public game being queried. */
+  const botGame = alias(gameTable, "bot_game");
+  const botGamesMeanwhile = eq(botGame.searchId, gameTable.publicId);
   /** Who shows up on the leaderboard: signed-in players who have finished a rated game. */
   const ranked = and(
     eq(user.isAnonymous, false),
+    eq(user.isBot, false),
     gt(sql`${playerStats.wins} + ${playerStats.losses} + ${playerStats.draws}`, 0),
   );
   /** Leaderboard order. The id is never shown; it keeps players who joined in the same instant apart. */
@@ -218,6 +255,7 @@ export function createArena({
               name: user.name,
               image: user.image,
               anonymous: user.isAnonymous,
+              bot: user.isBot,
               rating: playerStats.rating,
             })
             .from(user)
@@ -237,8 +275,10 @@ export function createArena({
         name: found.name,
         image: found.image,
         anonymous: found.anonymous ?? false,
+        bot: found.bot,
         rating: found.rating ?? 1000,
-        online: online.some((p) => p.userId === found.id),
+        // The bot never connects, but it is always there.
+        online: found.bot || online.some((p) => p.userId === found.id),
       };
     };
 
@@ -260,13 +300,25 @@ export function createArena({
         finishedAt: row.finishedAt,
       },
       seats: { X: row.playerX, O: row.playerO },
+      search: await searchOf(row.searchId),
     };
   }
 
-  function forViewer({ view, seats }: Snapshot, viewerId: string | null): MatchView {
+  /** Where the player of a game against the bot stands in their search for a match. */
+  async function searchOf(searchId: string | null): Promise<MatchView["search"]> {
+    if (!searchId) return null;
+    const [found] = await db
+      .select({ status: gameTable.status })
+      .from(gameTable)
+      .where(eq(gameTable.publicId, searchId));
+    if (found?.status !== "waiting" && found?.status !== "active") return null;
+    return { id: searchId, found: found.status === "active" };
+  }
+
+  function forViewer({ view, seats, search }: Snapshot, viewerId: string | null): MatchView {
     const seat =
       viewerId === null ? null : seats.X === viewerId ? "X" : seats.O === viewerId ? "O" : null;
-    return { ...view, seat };
+    return { ...view, seat, search: seat ? search : null };
   }
 
   async function view(gameId: string, viewerId: string | null): Promise<MatchView> {
@@ -394,6 +446,11 @@ export function createArena({
     return row!.publicId;
   }
 
+  /**
+   * Seats the second player. Returns the ids of the bot games the host played
+   * while waiting in a public game, whose player is to be told that the match
+   * was found.
+   */
   async function seat(tx: Tx, row: GameRow, userId: string) {
     await ensureStats(tx, userId);
     await tx
@@ -405,7 +462,95 @@ export function createArena({
         playerO: row.playerO ?? userId,
       })
       .where(eq(gameTable.id, row.id));
+    if (row.private) return [];
+    await lockSearch(tx, row.publicId);
+    return tx
+      .select({ gameId: gameTable.publicId })
+      .from(gameTable)
+      .where(eq(gameTable.searchId, row.publicId));
   }
+
+  /**
+   * Serializes starting a game against the bot with the match it was played
+   * meanwhile being found, so a bot game can't start just after.
+   */
+  async function lockSearch(tx: Tx, searchId: string) {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`search:${searchId}`}, 0))`,
+    );
+  }
+
+  /** The status of the public game a player waits in, held that way until `tx` ends. */
+  async function searchStatus(tx: Tx, searchId: string) {
+    await lockSearch(tx, searchId);
+    const [found] = await tx
+      .select({ status: gameTable.status })
+      .from(gameTable)
+      .where(eq(gameTable.publicId, searchId));
+    return found?.status;
+  }
+
+  /** Whether someone joined the public game a player waited in while playing the bot. */
+  async function matchFound(tx: Tx, searchId: string) {
+    const [match] = await tx
+      .select({ status: gameTable.status })
+      .from(gameTable)
+      .where(eq(gameTable.publicId, searchId));
+    return match?.status === "active" || match?.status === "finished";
+  }
+
+  async function ensureBot(tx: Tx) {
+    await tx
+      .insert(user)
+      .values({
+        id: BOT_ID,
+        name: BOT_NAME,
+        email: "bot@thicctactoe.invalid",
+        isBot: true,
+        onboarded: true,
+      })
+      .onConflictDoNothing();
+  }
+
+  /** Starts a game against the bot, which is never rated. Its opponent always plays X. */
+  async function openBotGame(tx: Tx, userId: string, searchId: string | null) {
+    await ensureBot(tx);
+    const [row] = await tx
+      .insert(gameTable)
+      .values({
+        status: "active",
+        startedAt: new Date(),
+        private: true,
+        rated: false,
+        createdBy: userId,
+        playerX: userId,
+        playerO: BOT_ID,
+        searchId,
+      })
+      .returning({ publicId: gameTable.publicId });
+    return row!.publicId;
+  }
+
+  /**
+   * A player who shows up for their match stops the bot games they played
+   * while waiting for it. Called off rather than lost, they count for nothing.
+   */
+  async function leaveBotGames(match: Snapshot["view"], userId: string) {
+    if (match.private || match.status !== "active") return [];
+    return db
+      .update(gameTable)
+      .set({ status: "cancelled" })
+      .where(
+        and(
+          eq(gameTable.searchId, match.id),
+          eq(gameTable.playerX, userId),
+          eq(gameTable.status, "active"),
+        ),
+      )
+      .returning({ gameId: gameTable.publicId });
+  }
+
+  const isBotGame = (row: GameRow) => row.playerX === BOT_ID || row.playerO === BOT_ID;
 
   async function isGuest(tx: Tx, userId: string) {
     const [found] = await tx
@@ -418,17 +563,17 @@ export function createArena({
   /**
    * Whether a game counts towards ratings and records: a rated game between
    * two signed-in players that both of them moved in. Unrated friend games,
-   * guests, games against yourself and games resigned before they began can't
-   * be used to farm rating.
+   * guests, the bot, games against yourself and games resigned before they
+   * began can't be used to farm rating.
    */
   async function isRated(tx: Tx, row: GameRow, moves: LoggedMove[]) {
     if (!row.rated || moves.length < RATED_MIN_MOVES) return false;
     // Fewer than two players means one sat in both seats, like a guest merged into the account they played.
     const players = await tx
-      .select({ anonymous: user.isAnonymous })
+      .select({ anonymous: user.isAnonymous, bot: user.isBot })
       .from(user)
       .where(inArray(user.id, [row.playerX!, row.playerO!]));
-    return players.length === 2 && players.every((player) => !player.anonymous);
+    return players.length === 2 && players.every((player) => !player.anonymous && !player.bot);
   }
 
   /** The rating `userId` has gained from `opponentId`, net, within the cap's window. */
@@ -513,6 +658,86 @@ export function createArena({
         finishedAt: new Date(),
       })
       .where(eq(gameTable.id, row.id));
+    // Whoever still plays the bot while this match waited for them learns it is over, once it commits.
+    if (!row.private) {
+      await tx.execute(
+        sql`select pg_notify(${CHANNEL}, ${gameTable.publicId}) from ${gameTable} where ${gameTable.searchId} = ${row.publicId}`,
+      );
+    }
+  }
+
+  /**
+   * Plays a move the rules allow, finishing the game if it ends it. Returns
+   * how many moves have been played, and whether it is now the bot's turn.
+   */
+  async function apply(tx: Tx, row: GameRow, move: Move) {
+    const result = play(replay(row.moves), move);
+    if (!result.ok) throw new ORPCError("CONFLICT", { message: result.error });
+
+    const moves = [...row.moves, { ...move, at: new Date().toISOString() }];
+    const { outcome, turn } = result.game;
+    if (outcome.status === "won") await finish(tx, row, outcome.winner, "line", moves);
+    else if (outcome.status === "draw") await finish(tx, row, null, "draw", moves);
+    else await tx.update(gameTable).set({ moves }).where(eq(gameTable.id, row.id));
+    return {
+      ply: moves.length,
+      botToMove: outcome.status === "playing" && row[`player${turn}`] === BOT_ID,
+    };
+  }
+
+  const isBotTurn = (row: GameRow, ply: number) =>
+    row.status === "active" &&
+    row.moves.length === ply &&
+    row[`player${replay(row.moves).turn}`] === BOT_ID;
+
+  /**
+   * Plays the bot's move in a game where it is the bot's turn after `ply`
+   * moves, after a moment to think. Instances may race to play the same
+   * turn; only the first move counts.
+   */
+  async function botTurn(gameId: string, ply: number) {
+    const key = `${gameId}:${ply}`;
+    if (botTurns.has(key) || closing.signal.aborted) return;
+    botTurns.add(key);
+    try {
+      const row = await db.query.game.findFirst({ where: { publicId: gameId } });
+      if (!row || !isBotTurn(row, ply)) return;
+      const [move] = await Promise.all([
+        bot.chooseMove(row.moves),
+        sleep(botDelayMs(), undefined, { signal: closing.signal }),
+      ]);
+      const moved = await db.transaction(async (tx) => {
+        const row = await lock(tx, gameId);
+        if (!isBotTurn(row, ply)) return false;
+        await apply(tx, row, move);
+        return true;
+      });
+      if (moved) await broadcast(gameId);
+    } catch (error) {
+      // Closing cuts the thought short; another instance plays the turn.
+      if (!closing.signal.aborted) console.error("bot move failed", gameId, error);
+    } finally {
+      botTurns.delete(key);
+    }
+  }
+
+  /** Plays the bot turns nobody has, like those of an instance that died mid-thought. */
+  async function resumeBotTurns() {
+    const ply = sql<number>`jsonb_array_length(${gameTable.moves})`.mapWith(Number);
+    const stuck = await db
+      .select({ gameId: gameTable.publicId, ply })
+      .from(gameTable)
+      .where(
+        and(
+          eq(gameTable.status, "active"),
+          lt(gameTable.updatedAt, ago(botStallMs)),
+          or(
+            and(eq(gameTable.playerX, BOT_ID), sql`${ply} % 2 = 0`),
+            and(eq(gameTable.playerO, BOT_ID), sql`${ply} % 2 = 1`),
+          ),
+        ),
+      );
+    for (const { gameId, ply } of stuck) void botTurn(gameId, ply);
   }
 
   /** Marks a player as watching; returns the presence id to release later. */
@@ -540,9 +765,10 @@ export function createArena({
   /**
    * Refreshes this instance's presence, then cleans up after every instance:
    * players whose instance died go offline, a waiting game nobody has watched
-   * for a while is cancelled, since it would strand whoever joins it, an
-   * active game whose player to move has left is lost by them, and cancelled
-   * games nobody played are eventually deleted.
+   * for a while is cancelled, since it would strand whoever joins it (playing
+   * the bot meanwhile counts as watching), an active game whose player to
+   * move has left is lost by them, bot turns nobody played get played, and
+   * cancelled games nobody played are eventually deleted.
    */
   async function sweep() {
     const back = await refresh();
@@ -564,7 +790,13 @@ export function createArena({
               .from(presence)
               .where(
                 and(
-                  eq(presence.gameId, gameTable.publicId),
+                  or(
+                    eq(presence.gameId, gameTable.publicId),
+                    inArray(
+                      presence.gameId,
+                      db.select({ id: botGame.publicId }).from(botGame).where(botGamesMeanwhile),
+                    ),
+                  ),
                   or(isNull(presence.leftAt), gt(presence.leftAt, ago(abandonGraceMs))),
                 ),
               ),
@@ -573,6 +805,7 @@ export function createArena({
       )
       .returning({ gameId: gameTable.publicId });
     const forfeited = await forfeitAbandoned();
+    await resumeBotTurns();
     // Kept long enough to tell how long a player has been gone.
     await db
       .delete(presence)
@@ -650,6 +883,8 @@ export function createArena({
           if (!row) return false;
           const absent = replay(row.moves).turn;
           const userId = row[`player${absent}`];
+          // The bot is always there; a turn it has not played yet is resumed instead.
+          if (userId === BOT_ID) return false;
           if (userId) {
             const [seen] = await tx
               .select({ id: presence.id })
@@ -663,6 +898,11 @@ export function createArena({
               )
               .limit(1);
             if (seen) return false;
+          }
+          if (row.searchId && (await matchFound(tx, row.searchId))) {
+            // Left for the match found meanwhile, or ignored it: called off, not lost.
+            await tx.update(gameTable).set({ status: "cancelled" }).where(eq(gameTable.id, row.id));
+            return true;
           }
           await finish(tx, row, other(absent), "abandon");
           return true;
@@ -744,7 +984,8 @@ export function createArena({
       const { id, joined } = await db.transaction(async (tx) => {
         await lockHost(tx, userId);
         const own = await waitingOf(tx, userId, false, true);
-        if (own) return { id: own, joined: false };
+        if (own) return { id: own, joined: null };
+        const recent = new Date(Date.now() - matchmakingWindowMs);
 
         const [open] = await tx
           .select()
@@ -754,19 +995,25 @@ export function createArena({
               eq(gameTable.status, "waiting"),
               eq(gameTable.private, false),
               or(ne(gameTable.createdBy, userId), isNull(gameTable.createdBy)),
-              gt(gameTable.createdAt, new Date(Date.now() - matchmakingWindowMs)),
+              // A host still playing the bot while they wait is still around.
+              or(
+                gt(gameTable.createdAt, recent),
+                exists(
+                  tx
+                    .select({ id: botGame.id })
+                    .from(botGame)
+                    .where(and(botGamesMeanwhile, gt(botGame.updatedAt, recent))),
+                ),
+              ),
             ),
           )
           .orderBy(asc(gameTable.createdAt))
           .limit(1)
           .for("update", { skipLocked: true });
-        if (open) {
-          await seat(tx, open, userId);
-          return { id: open.publicId, joined: true };
-        }
-        return { id: await create(tx, userId, false, true), joined: false };
+        if (open) return { id: open.publicId, joined: await seat(tx, open, userId) };
+        return { id: await create(tx, userId, false, true), joined: null };
       });
-      if (joined) await broadcast(id);
+      if (joined) await broadcastAll([{ gameId: id }, ...joined]);
       return id;
     },
 
@@ -788,22 +1035,47 @@ export function createArena({
     async join(gameId: string, userId: string): Promise<MatchView> {
       const joined = await db.transaction(async (tx) => {
         const row = await lock(tx, gameId);
-        if (seatOf(row, userId)) return false;
+        if (seatOf(row, userId)) return null;
         if (row.status !== "waiting") {
           throw new ORPCError("CONFLICT", { message: "This game already has two players" });
         }
         if (row.private && row.rated && (await isGuest(tx, userId))) {
           throw new ORPCError("FORBIDDEN", { message: "Sign in to accept a rated game" });
         }
-        await seat(tx, row, userId);
-        return true;
+        return seat(tx, row, userId);
       });
-      if (joined) await broadcast(gameId);
+      if (joined) await broadcastAll([{ gameId }, ...joined]);
       return view(gameId, userId);
     },
 
+    /**
+     * Starts a game against the bot for a player waiting in a public game,
+     * who stays in the queue meanwhile: once someone joins that game, they are
+     * told, and the bot game is called off when they go to it. Asking again
+     * returns the bot game in progress.
+     */
+    async playBot(searchId: string, userId: string): Promise<string> {
+      return db.transaction(async (tx) => {
+        await lockSearch(tx, searchId);
+        const [search] = await tx.select().from(gameTable).where(eq(gameTable.publicId, searchId));
+        if (!search) throw new ORPCError("NOT_FOUND", { message: "Game not found" });
+        if (search.private || search.createdBy !== userId) {
+          throw new ORPCError("FORBIDDEN", { message: "You are not waiting for this match" });
+        }
+        if (search.status !== "waiting") {
+          throw new ORPCError("CONFLICT", { message: "This match has already started" });
+        }
+        const [current] = await tx
+          .select({ id: gameTable.publicId })
+          .from(gameTable)
+          .where(and(eq(gameTable.searchId, searchId), eq(gameTable.status, "active")))
+          .limit(1);
+        return current?.id ?? openBotGame(tx, userId, searchId);
+      });
+    },
+
     async move(gameId: string, userId: string, move: Move): Promise<MatchView> {
-      await db.transaction(async (tx) => {
+      const { ply, botToMove } = await db.transaction(async (tx) => {
         const row = await lock(tx, gameId);
         if (row.status !== "active") {
           throw new ORPCError("CONFLICT", { message: "This game is not in progress" });
@@ -811,16 +1083,10 @@ export function createArena({
         if (seatOf(row, userId) !== move.player) {
           throw new ORPCError("FORBIDDEN", { message: "That is not your piece" });
         }
-        const result = play(replay(row.moves), move);
-        if (!result.ok) throw new ORPCError("CONFLICT", { message: result.error });
-
-        const moves = [...row.moves, { ...move, at: new Date().toISOString() }];
-        const { outcome } = result.game;
-        if (outcome.status === "won") return finish(tx, row, outcome.winner, "line", moves);
-        if (outcome.status === "draw") return finish(tx, row, null, "draw", moves);
-        await tx.update(gameTable).set({ moves }).where(eq(gameTable.id, row.id));
+        return apply(tx, row, move);
       });
       await broadcast(gameId);
+      if (botToMove) void botTurn(gameId, ply);
       return view(gameId, userId);
     },
 
@@ -841,7 +1107,8 @@ export function createArena({
     /**
      * Offers to play the same opponent again once a game is over, or accepts
      * their offer. Accepting starts the rematch with colors swapped; watchers
-     * of the finished game learn its id.
+     * of the finished game learn its id. The bot accepts right away, and its
+     * opponent keeps X.
      */
     async rematch(gameId: string, userId: string): Promise<MatchView> {
       await db.transaction(async (tx) => {
@@ -854,6 +1121,16 @@ export function createArena({
         if (row.rematchId) return;
         if (!row.playerX || !row.playerO) {
           throw new ORPCError("CONFLICT", { message: "Your opponent is no longer around" });
+        }
+        if (isBotGame(row)) {
+          // The bot always accepts, and keeps waiting with its opponent if they still are.
+          const search = row.searchId && (await searchStatus(tx, row.searchId));
+          if (search === "active") {
+            throw new ORPCError("CONFLICT", { message: "Your match has been found" });
+          }
+          const next = await openBotGame(tx, userId, search === "waiting" ? row.searchId : null);
+          await tx.update(gameTable).set({ rematchId: next }).where(eq(gameTable.id, row.id));
+          return;
         }
         if (row.rematchOffer !== other(seat)) {
           await tx.update(gameTable).set({ rematchOffer: seat }).where(eq(gameTable.id, row.id));
@@ -912,7 +1189,8 @@ export function createArena({
         if (userId !== null && forViewer(initial, userId).seat !== null) {
           // Announce the player as online; this stream receives that update too.
           connection = await connect(gameId, userId);
-          await broadcast(gameId);
+          const left = await leaveBotGames(initial.view, userId);
+          await broadcastAll([{ gameId }, ...left]);
         } else {
           yield forViewer(initial, userId);
         }
@@ -958,6 +1236,7 @@ export function createArena({
               name: user.name,
               image: user.image,
               anonymous: user.isAnonymous,
+              bot: user.isBot,
               createdAt: user.createdAt,
               rating: playerStats.rating,
               wins: playerStats.wins,
@@ -974,13 +1253,14 @@ export function createArena({
           const losses = found.losses ?? 0;
           const draws = found.draws ?? 0;
           const anonymous = found.anonymous ?? false;
-          const onBoard = !anonymous && wins + losses + draws > 0;
+          const onBoard = !anonymous && !found.bot && wins + losses + draws > 0;
 
           return {
             id: playerId,
             name: found.name,
             image: found.image,
             anonymous,
+            bot: found.bot,
             joinedAt: found.createdAt,
             rating,
             rank: onBoard ? await rankOf(tx, found.id) : null,
@@ -1041,6 +1321,7 @@ export function createArena({
               name: user.name,
               image: user.image,
               anonymous: user.isAnonymous,
+              bot: user.isBot,
             })
             .from(user)
             .where(inArray(user.id, opponentIds))
@@ -1060,6 +1341,7 @@ export function createArena({
                 name: opponent.name,
                 image: opponent.image,
                 anonymous: opponent.anonymous ?? false,
+                bot: opponent.bot,
               }
             : null,
           result: row.winner === null ? "draw" : row.winner === seat ? "win" : "loss",

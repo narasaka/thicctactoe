@@ -20,5 +20,8 @@ export const ENV = z
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     GITHUB_CLIENT_ID: z.string().optional(),
     GITHUB_CLIENT_SECRET: z.string().optional(),
+    // The bot service plays the bot's moves when both are set; otherwise a simple built-in bot does.
+    BOT_URL: z.url().optional(),
+    BOT_TOKEN: z.string().optional(),
   })
   .parse(process.env);

@@ -56,6 +56,11 @@ export const game = pgTable(
     rematchOffer: text("rematch_offer").$type<Player>(),
     /** Public id of the game both players agreed to play next. */
     rematchId: text("rematch_id"),
+    /**
+     * For a game against the bot, played while waiting for a match: the
+     * public id of the public game its player is still waiting in.
+     */
+    searchId: text("search_id"),
   },
   (table) => [
     index("game_matchmaking_idx")
@@ -69,6 +74,9 @@ export const game = pgTable(
       .where(sql`${table.status} = 'cancelled' and ${table.startedAt} is null`),
     index("game_playerX_idx").on(table.playerX),
     index("game_playerO_idx").on(table.playerO),
+    index("game_searchId_idx")
+      .on(table.searchId)
+      .where(sql`${table.searchId} is not null`),
   ],
 );
 

@@ -2,6 +2,10 @@ import type { MatchView } from "@thicctactoe/api/arena";
 
 export type { MatchView };
 
+/** Whether one of the players is the house bot. */
+export const againstBot = (view: MatchView) =>
+  view.players.X?.bot === true || view.players.O?.bot === true;
+
 const STAGE = { waiting: 0, active: 1, finished: 2, cancelled: 2 } as const;
 
 /**
