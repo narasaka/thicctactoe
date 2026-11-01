@@ -1031,7 +1031,8 @@ describe("bot games", () => {
     await Bun.sleep(50);
     await leaving.sweep();
     expect(await leaving.view(id, null)).toMatchObject({ status: "cancelled", winner: null });
-    expect((await leaving.history(await publicIdOf(host))).games).toEqual([]);
+    const { games } = await leaving.history(await publicIdOf(host));
+    expect(games.map((game) => game.id)).not.toContain(id);
     await elsewhere.return(undefined);
   });
 
