@@ -52,9 +52,6 @@ export default defineRailway(() => {
       // Set once with `railway variables --service api --set DOTENV_PRIVATE_KEY_PRODUCTION=…`
       // (the value is in the root .env.keys).
       DOTENV_PRIVATE_KEY_PRODUCTION: preserve(),
-      // The bot service, over the private network. References, so the token is never copied.
-      BOT_URL: "http://${{bot.RAILWAY_PRIVATE_DOMAIN}}:3000",
-      BOT_TOKEN: "${{bot.BOT_TOKEN}}",
     },
   });
 

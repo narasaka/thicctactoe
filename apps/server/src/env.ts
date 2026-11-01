@@ -21,14 +21,7 @@ export const ENV = z
     GITHUB_CLIENT_ID: z.string().optional(),
     GITHUB_CLIENT_SECRET: z.string().optional(),
     // The bot service plays the bot's moves when both are set; otherwise a simple built-in bot does.
-    // A URL that isn't one, like a reference to a service not deployed yet, falls back too.
-    BOT_URL: z
-      .url()
-      .optional()
-      .catch(({ input }) => {
-        console.error(`BOT_URL ${JSON.stringify(input)} is not a URL; the built-in bot plays`);
-        return undefined;
-      }),
+    BOT_URL: z.url().optional(),
     BOT_TOKEN: z.string().optional(),
   })
   .parse(process.env);
