@@ -4,7 +4,12 @@ import { bucket, defineRailway, github, postgres, preserve, project, service } f
  * Backend infrastructure: `railway config plan` to preview, `railway config apply`
  * to apply. App configuration lives in apps/server/.env.production (dotenvx);
  * the service only holds the key that decrypts it.
+ *
+ * Only these resources: the bot service is managed from another repository, as
+ * its own named partial.
  */
+export const partial = "public";
+
 export default defineRailway(() => {
   const db = postgres("postgres");
   const avatars = bucket("avatars", { region: "sjc" });
@@ -47,6 +52,9 @@ export default defineRailway(() => {
       // Set once with `railway variables --service api --set DOTENV_PRIVATE_KEY_PRODUCTION=…`
       // (the value is in the root .env.keys).
       DOTENV_PRIVATE_KEY_PRODUCTION: preserve(),
+      // The bot service, over the private network. References, so the token is never copied.
+      BOT_URL: "http://${{bot.RAILWAY_PRIVATE_DOMAIN}}:3000",
+      BOT_TOKEN: "${{bot.BOT_TOKEN}}",
     },
   });
 
